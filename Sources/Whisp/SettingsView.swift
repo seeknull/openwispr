@@ -27,11 +27,6 @@ struct SettingsView: View {
         _selectedTab = State(initialValue: permissions.allGranted ? .general : .permissions)
     }
 
-    /// Re-poll permissions every 2 seconds. macOS gives us no notification
-    /// when the user toggles Whisp in System Settings; this is the only
-    /// way to update the UI live.
-    private let pollTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
-
     var body: some View {
         TabView(selection: $selectedTab) {
             generalTab
@@ -46,9 +41,18 @@ struct SettingsView: View {
         }
         .frame(width: 540, height: 460)
         .padding()
-        .onReceive(pollTimer) { _ in onCheckPermissions() }
+        // Refresh only on tab change AND when the window becomes key
+        // again (after the user came back from System Settings).
+        // A 2-second poll timer was the trigger for a recurring AppKit
+        // constraint-update crash on macOS 26 — `@Published` mutations
+        // inside the host view at arbitrary times caused NSView's
+        // updateConstraints cycle to throw. The user can hit Re-check
+        // manually in the rare case that auto-refresh doesn't see a grant.
         .onChange(of: selectedTab) { new in
             if new == .permissions { onCheckPermissions() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            onCheckPermissions()
         }
     }
 
