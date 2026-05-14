@@ -1,6 +1,6 @@
 import AppKit
 import CoreGraphics
-import WhispCore
+import OpenWisprCore
 
 /// Inserts text into whatever app currently has keyboard focus. Two
 /// strategies, selectable via `InsertionMode`.

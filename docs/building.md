@@ -1,20 +1,20 @@
-# Building Whisp
+# Building OpenWispr
 
 ## Prerequisites
 
-- **macOS 13+** (Whisp's deployment target; you can develop on newer
+- **macOS 13+** (OpenWispr's deployment target; you can develop on newer
   versions).
-- **Xcode 15+**, or the matching Command Line Tools — Whisp uses Swift
+- **Xcode 15+**, or the matching Command Line Tools — OpenWispr uses Swift
   6.1.
 - **CMake 3.22+** — `brew install cmake`. Only needed once, to build
   Moonshine's XCFramework.
 - A clone of [moonshine](https://github.com/moonshine-ai/moonshine) as a
-  sibling of your `whisp` checkout (see [README.md](../README.md#build-from-source)).
+  sibling of your `openwispr` checkout (see [README.md](../README.md#build-from-source)).
 
 ## Bootstrap
 
 ```bash
-cd whisp
+cd openwispr
 ./scripts/bootstrap.sh
 ```
 
@@ -25,7 +25,7 @@ This script:
    `Moonshine.xcframework` (iOS, iOS-simulator, macOS slices). This is
    the artifact `Package.swift` depends on. Takes ~3 minutes on Apple
    Silicon.
-3. Runs `swift package resolve` so Whisp's deps are cached.
+3. Runs `swift package resolve` so OpenWispr's deps are cached.
 
 You only need to re-run `bootstrap.sh` if Moonshine's core C++ changes
 or you blow away `../moonshine/swift/Moonshine.xcframework`.
@@ -34,7 +34,7 @@ or you blow away `../moonshine/swift/Moonshine.xcframework`.
 
 ```bash
 swift build                # debug build, x86_64 or arm64 depending on host
-swift run Whisp            # launch the menu-bar app
+swift run OpenWispr            # launch the menu-bar app
 ```
 
 The first `swift run` after bootstrap takes a minute to compile
@@ -44,11 +44,11 @@ MoonshineVoice. Subsequent runs are incremental.
 
 ```bash
 swift test                              # everything
-swift test --filter WhispCoreTests      # pure logic, fast
-swift test --filter WhispIntegrationTests
+swift test --filter OpenWisprCoreTests      # pure logic, fast
+swift test --filter OpenWisprIntegrationTests
 ```
 
-`WhispIntegrationTests` loads Moonshine's bundled tiny-en model and a
+`OpenWisprIntegrationTests` loads Moonshine's bundled tiny-en model and a
 WAV fixture; it confirms the xcframework links and the transcription
 pipeline produces sensible output.
 
@@ -62,8 +62,8 @@ pipeline produces sensible output.
 Output:
 
 ```
-build/Whisp.app
-dist/Whisp-<version>.zip
+build/OpenWispr.app
+dist/OpenWispr-<version>.zip
 ```
 
 The release script builds a universal (arm64 + x86_64) binary, assembles
@@ -85,7 +85,7 @@ script generates it.
 
 ### `error: could not find Moonshine repo at ...`
 
-Whisp expects `moonshine/` as a sibling of `whisp/`. If you have it
+OpenWispr expects `moonshine/` as a sibling of `openwispr/`. If you have it
 elsewhere, either symlink it or edit the path in `Package.swift` and
 `scripts/bootstrap.sh`.
 
@@ -99,9 +99,9 @@ rm -rf ../moonshine/swift/Moonshine.xcframework ../moonshine/core/build
 ./scripts/bootstrap.sh
 ```
 
-### Whisp launches but the menu-bar icon doesn't appear
+### OpenWispr launches but the menu-bar icon doesn't appear
 
-`Info.plist` sets `LSUIElement = true`, which makes Whisp an agent
+`Info.plist` sets `LSUIElement = true`, which makes OpenWispr an agent
 (no Dock icon). The icon will be in the menu bar — look for the
 waveform glyph on the right side. If it's truly missing, check
-Console.app for `subsystem:ai.whisp.dev` log lines.
+Console.app for `subsystem:dev.openwispr.app` log lines.

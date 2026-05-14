@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <!--
-        Whisp ships unsigned for now (see distribution.md). The App Sandbox
+        OpenWispr ships unsigned for now (see distribution.md). The App Sandbox
         is therefore disabled to keep CGEventTap and arbitrary clipboard
         access working without entitlements review.
 

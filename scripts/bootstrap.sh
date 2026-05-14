@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Bootstrap a fresh checkout of Whisp.
+# Bootstrap a fresh checkout of OpenWispr.
 #
-# 1. Ensures ../moonshine exists (Whisp depends on it via local Swift package).
+# 1. Ensures ../moonshine exists (OpenWispr depends on it via local Swift package).
 # 2. Builds Moonshine.xcframework once (needed by SwiftPM to resolve the dep).
-# 3. Resolves Whisp's Swift package dependencies.
+# 3. Resolves OpenWispr's Swift package dependencies.
 #
 # Usage:
 #   ./scripts/bootstrap.sh
@@ -18,8 +18,8 @@ if [ ! -d "$MOONSHINE_DIR" ]; then
     cat <<EOF >&2
 error: Moonshine repo not found at $MOONSHINE_DIR
 
-Whisp depends on the in-tree Moonshine Swift package as a sibling directory.
-Clone it next to whisp/:
+OpenWispr depends on the in-tree Moonshine Swift package as a sibling directory.
+Clone it next to openwispr/:
 
     cd "$WORKSPACE_ROOT"
     git clone https://github.com/moonshine-ai/moonshine.git
@@ -34,12 +34,12 @@ else
     echo "==> Moonshine.xcframework already present"
 fi
 
-echo "==> Resolving Whisp Swift package..."
+echo "==> Resolving OpenWispr Swift package..."
 cd "$WHISP_DIR"
 swift package resolve
 
 echo
 echo "Done. Next steps:"
 echo "  swift test         # run unit + integration tests"
-echo "  swift run Whisp    # launch the menu-bar app"
-echo "  ./scripts/build-release.sh   # produce a packaged Whisp.app"
+echo "  swift run OpenWispr    # launch the menu-bar app"
+echo "  ./scripts/build-release.sh   # produce a packaged OpenWispr.app"

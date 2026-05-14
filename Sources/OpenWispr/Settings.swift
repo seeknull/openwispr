@@ -1,14 +1,14 @@
 import Foundation
 import SwiftUI
-import WhispCore
+import OpenWisprCore
 
 /// User-tunable preferences, persisted via @AppStorage.
 ///
 /// We use plain `@AppStorage` strings/bools so the persisted format stays
-/// readable in `defaults read ai.whisp.dev` — useful for support.
+/// readable in `defaults read dev.openwispr.app` — useful for support.
 @MainActor
-final class WhispSettings: ObservableObject {
-    static let shared = WhispSettings()
+final class OpenWisprSettings: ObservableObject {
+    static let shared = OpenWisprSettings()
 
     @AppStorage("insertionMode")      var insertionModeRaw: String = InsertionMode.clipboardPaste.rawValue
     @AppStorage("showHUD")            var showHUD: Bool = true

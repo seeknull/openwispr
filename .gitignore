@@ -17,7 +17,7 @@ dist/
 *.zip
 
 # Models (downloaded by scripts/download-models.sh, not committed)
-Sources/Whisp/Resources/models/
+Sources/OpenWispr/Resources/models/
 
 # Editor
 .vscode/

@@ -5,7 +5,7 @@ import Foundation
 /// transcript line is completed or text-changed.
 ///
 /// Moonshine emits text-changed events as the user is still speaking (the
-/// suffix can shrink when the model revises). Whisp can't undo what it's
+/// suffix can shrink when the model revises). OpenWispr can't undo what it's
 /// already typed in another app, so the safest strategy is:
 ///
 ///   - Wait for `lineCompleted` events.

@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import WhispCore
+import OpenWisprCore
 
 /// Owns the `NSStatusItem` in the menu bar. Subscribes to `DictationController`
 /// for state changes and to `SelfTest` for health-check results; renders
@@ -12,7 +12,7 @@ final class MenuBarController: NSObject {
     private let engine: DictationEngine
     private let hotkey: HotkeyMonitor
     private let permissions: PermissionsManager
-    private let settings: WhispSettings
+    private let settings: OpenWisprSettings
     private let selfTest: SelfTest
     private let hud = ListeningHUD()
     private var settingsWindow: NSWindow?
@@ -24,7 +24,7 @@ final class MenuBarController: NSObject {
         engine: DictationEngine,
         hotkey: HotkeyMonitor,
         permissions: PermissionsManager,
-        settings: WhispSettings,
+        settings: OpenWisprSettings,
         selfTest: SelfTest
     ) {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -117,11 +117,11 @@ final class MenuBarController: NSObject {
 
         menu.addItem(.separator())
 
-        let about = NSMenuItem(title: "About Whisp", action: #selector(openAbout), keyEquivalent: "")
+        let about = NSMenuItem(title: "About OpenWispr", action: #selector(openAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
 
-        let quit = NSMenuItem(title: "Quit Whisp", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit OpenWispr", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
 
@@ -162,16 +162,16 @@ final class MenuBarController: NSObject {
 
         if state.isListening {
             icon = listeningIcon
-            tooltip = "Whisp — listening (\(settings.hotkeyConfig.displayName) to stop)"
+            tooltip = "OpenWispr — listening (\(settings.hotkeyConfig.displayName) to stop)"
         } else if case .failure(let m) = test?.overall {
             icon = warningIcon(color: .systemRed)
-            tooltip = "Whisp — not ready: \(m)"
+            tooltip = "OpenWispr — not ready: \(m)"
         } else if case .warning(let m) = test?.overall {
             icon = warningIcon(color: .systemOrange)
-            tooltip = "Whisp — degraded: \(m)"
+            tooltip = "OpenWispr — degraded: \(m)"
         } else {
             icon = idleIcon
-            tooltip = "Whisp — \(settings.hotkeyConfig.displayName) to dictate"
+            tooltip = "OpenWispr — \(settings.hotkeyConfig.displayName) to dictate"
         }
 
         if let button = statusItem.button {
@@ -183,7 +183,7 @@ final class MenuBarController: NSObject {
     }
 
     private var idleIcon: NSImage? {
-        let img = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Whisp idle")
+        let img = NSImage(systemSymbolName: "waveform", accessibilityDescription: "OpenWispr idle")
         img?.isTemplate = true
         return img
     }
@@ -200,7 +200,7 @@ final class MenuBarController: NSObject {
             return true
         }
         image.isTemplate = false
-        image.accessibilityDescription = "Whisp listening"
+        image.accessibilityDescription = "OpenWispr listening"
         return image
     }
 
@@ -219,7 +219,7 @@ final class MenuBarController: NSObject {
             return true
         }
         image.isTemplate = false
-        image.accessibilityDescription = "Whisp needs attention"
+        image.accessibilityDescription = "OpenWispr needs attention"
         return image
     }
 
@@ -271,7 +271,7 @@ final class MenuBarController: NSObject {
                 defer: false
             )
             window.contentViewController = host
-            window.title = "Whisp Settings"
+            window.title = "OpenWispr Settings"
             window.isReleasedWhenClosed = false
             window.hidesOnDeactivate = false
             window.level = .floating

@@ -8,7 +8,7 @@ on:
 
 jobs:
   unit-tests:
-    name: Unit tests (WhispCore)
+    name: Unit tests (OpenWisprCore)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +21,10 @@ jobs:
           swift --version
           xcodebuild -version
 
-      # WhispCore has zero non-Foundation deps, so we can run its tests
+      # OpenWisprCore has zero non-Foundation deps, so we can run its tests
       # without the heavy bootstrap of Moonshine.xcframework.
-      - name: swift test --filter WhispCoreTests
-        run: swift test --filter WhispCoreTests
+      - name: swift test --filter OpenWisprCoreTests
+        run: swift test --filter OpenWisprCoreTests
 
   integration-tests:
     name: Integration tests (Moonshine WAV roundtrip)
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: whisp
+          path: openwispr
 
       - uses: actions/checkout@v4
         with:
@@ -47,9 +47,9 @@ jobs:
         run: brew install cmake
 
       - name: Bootstrap (builds Moonshine.xcframework)
-        working-directory: whisp
+        working-directory: openwispr
         run: ./scripts/bootstrap.sh
 
       - name: swift test
-        working-directory: whisp
+        working-directory: openwispr
         run: swift test

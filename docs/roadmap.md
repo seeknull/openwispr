@@ -13,7 +13,7 @@ Rough priority order. Issues and PRs welcome on any of these.
 ## v0.3
 
 - [ ] **Notarized builds** + Sparkle auto-update.
-- [ ] **Homebrew Cask** for `brew install --cask whisp`.
+- [ ] **Homebrew Cask** for `brew install --cask openwispr`.
 - [ ] **Multi-language models** — currently we bundle `medium-streaming-en`.
 
 ## Stretch

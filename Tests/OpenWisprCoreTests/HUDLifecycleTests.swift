@@ -1,5 +1,5 @@
 import XCTest
-@testable import WhispCore
+@testable import OpenWisprCore
 
 /// Doesn't test the AppKit HUD directly (that needs an NSApplication),
 /// but ensures the DictationController emits the right state sequence

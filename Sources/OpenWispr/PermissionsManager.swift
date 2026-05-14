@@ -4,7 +4,7 @@ import ApplicationServices
 import Foundation
 import OSLog
 
-/// Coordinates the two macOS permissions Whisp actually needs:
+/// Coordinates the two macOS permissions OpenWispr actually needs:
 ///
 ///   1. **Microphone** — needed for the mic transcriber.
 ///   2. **Accessibility** — needed to post synthetic input events AND for
@@ -19,11 +19,11 @@ import OSLog
 /// ## Why Accessibility doesn't have the same silent-deny problem
 ///
 /// `AXIsProcessTrustedWithOptions(prompt: true)` triggers System Settings
-/// to open and adds Whisp to the Accessibility list — even for ad-hoc
+/// to open and adds OpenWispr to the Accessibility list — even for ad-hoc
 /// apps. We've confirmed this works in practice. The path to grant is:
-///   1. Click "Open Settings" in Whisp's Settings → Permissions tab.
-///   2. Toggle Whisp on in System Settings → Accessibility.
-///   3. Restart Whisp (the running process caches the denied answer).
+///   1. Click "Open Settings" in OpenWispr's Settings → Permissions tab.
+///   2. Toggle OpenWispr on in System Settings → Accessibility.
+///   3. Restart OpenWispr (the running process caches the denied answer).
 enum PermissionStatus: Equatable {
     case granted
     case denied
@@ -37,13 +37,13 @@ enum PermissionKind: String, CaseIterable {
 
 @MainActor
 final class PermissionsManager: ObservableObject {
-    private let log = Logger(subsystem: "ai.whisp.dev", category: "PermissionsManager")
+    private let log = Logger(subsystem: "dev.openwispr.app", category: "PermissionsManager")
 
     @Published private(set) var microphone: PermissionStatus = .notDetermined
     @Published private(set) var accessibility: PermissionStatus = .notDetermined
 
     /// Set true on launch if the binary's CDHash differs from the one
-    /// stored last time Whisp observed all permissions as granted.
+    /// stored last time OpenWispr observed all permissions as granted.
     @Published private(set) var signatureChangedSinceLastGrant: Bool = false
 
     init() {
@@ -68,17 +68,17 @@ final class PermissionsManager: ObservableObject {
     }
 
     /// Accessibility caches its decision per-process: a grant made while
-    /// Whisp is running isn't visible until Whisp restarts. Mic doesn't
+    /// OpenWispr is running isn't visible until OpenWispr restarts. Mic doesn't
     /// have this trap.
     var needsRestart: Bool {
         accessibility != .granted
     }
 
-    /// Nuclear reset: clear all Whisp TCC entries and quit so the next
+    /// Nuclear reset: clear all OpenWispr TCC entries and quit so the next
     /// launch comes up clean.
     func hardReset() {
-        log.warning("Hard reset: clearing all TCC grants for ai.whisp.dev")
-        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.dev"
+        log.warning("Hard reset: clearing all TCC grants for dev.openwispr.app")
+        let bundleID = Bundle.main.bundleIdentifier ?? "dev.openwispr.app"
         _ = runTccutil(service: "All", bundle: bundleID)
         UserDefaults.standard.removeObject(forKey: lastGrantedCDHashKey)
         UserDefaults.standard.synchronize()
@@ -88,8 +88,8 @@ final class PermissionsManager: ObservableObject {
         }
     }
 
-    /// Spawn `open -n` to launch a fresh copy of Whisp and exit.
-    func restartWhisp() {
+    /// Spawn `open -n` to launch a fresh copy of OpenWispr and exit.
+    func restartOpenWispr() {
         let bundlePath = Bundle.main.bundleURL.path
         let task = Process()
         task.launchPath = "/usr/bin/open"

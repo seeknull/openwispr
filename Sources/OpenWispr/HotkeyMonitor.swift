@@ -1,8 +1,8 @@
 import AppKit
 import OSLog
-import WhispCore
+import OpenWisprCore
 
-private let log = Logger(subsystem: "ai.whisp.dev", category: "HotkeyMonitor")
+private let log = Logger(subsystem: "dev.openwispr.app", category: "HotkeyMonitor")
 
 /// Watches for the configured hotkey using **`NSEvent.addGlobalMonitorForEvents`**.
 ///
@@ -19,15 +19,15 @@ private let log = Logger(subsystem: "ai.whisp.dev", category: "HotkeyMonitor")
 /// of two, and a permission that does work for ad-hoc apps.
 ///
 /// Trade-off: NSEvent global monitors see events but can't *suppress* them.
-/// That's fine — Whisp never wanted to swallow Fn+Option anyway. The Fn
+/// That's fine — OpenWispr never wanted to swallow Fn+Option anyway. The Fn
 /// key's default behaviour (which on recent macOS opens a "Press 🌐 key to"
 /// configured action) still fires, but the user can set that to "Do
 /// Nothing" in System Settings → Keyboard to silence it.
 ///
 /// Local monitor (`NSEvent.addLocalMonitorForEvents`) covers the case where
-/// Whisp itself has key focus — global monitors deliver events only when
+/// OpenWispr itself has key focus — global monitors deliver events only when
 /// another app is frontmost. We install both so the hotkey works whether
-/// the focus is on Whisp's settings window or on someone else's editor.
+/// the focus is on OpenWispr's settings window or on someone else's editor.
 final class HotkeyMonitor {
     typealias ToggleHandler = @MainActor (HotkeyStateMachine.Effect) -> Void
 
@@ -94,7 +94,7 @@ final class HotkeyMonitor {
         // NSEvent.modifierFlags reports Fn via .function — unlike CGEvent's
         // .maskSecondaryFn, this is a published, supported API. Trace at
         // debug level so we can see what we're getting:
-        //   log stream --predicate 'subsystem == "ai.whisp.dev"' --level=debug
+        //   log stream --predicate 'subsystem == "dev.openwispr.app"' --level=debug
         log.debug("flagsChanged raw=\(event.modifierFlags.rawValue, privacy: .public) held=\(held, privacy: .public)")
 
         let now = Date().timeIntervalSinceReferenceDate

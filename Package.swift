@@ -1,39 +1,39 @@
 // swift-tools-version: 6.1
 import PackageDescription
 
-// Whisp depends on the in-tree Moonshine Swift package at ../moonshine/swift.
+// OpenWispr depends on the in-tree Moonshine Swift package at ../moonshine/swift.
 // Run `scripts/bootstrap.sh` once to build Moonshine.xcframework before
 // `swift build` / `swift test` will resolve.
 let package = Package(
-    name: "Whisp",
+    name: "OpenWispr",
     platforms: [.macOS(.v13)],
     products: [
-        .library(name: "WhispCore", targets: ["WhispCore"]),
-        .executable(name: "Whisp", targets: ["Whisp"]),
+        .library(name: "OpenWisprCore", targets: ["OpenWisprCore"]),
+        .executable(name: "OpenWispr", targets: ["OpenWispr"]),
     ],
     dependencies: [
         .package(name: "Moonshine", path: "../moonshine/swift"),
     ],
     targets: [
         .target(
-            name: "WhispCore",
-            path: "Sources/WhispCore"
+            name: "OpenWisprCore",
+            path: "Sources/OpenWisprCore"
         ),
         .executableTarget(
-            name: "Whisp",
+            name: "OpenWispr",
             dependencies: [
-                "WhispCore",
+                "OpenWisprCore",
                 .product(name: "MoonshineVoice", package: "Moonshine"),
             ],
-            path: "Sources/Whisp",
+            path: "Sources/OpenWispr",
             exclude: [
                 "Resources/Info.plist",
-                "Resources/Whisp.entitlements",
+                "Resources/OpenWispr.entitlements",
                 // Models are downloaded into Resources/models/ by
                 // scripts/download-models.sh and copied straight into
                 // Contents/Resources/models/ by scripts/build-release.sh.
                 // We exclude them from SwiftPM so it doesn't bundle them
-                // into the Whisp_Whisp.bundle and produce 'unhandled file'
+                // into the OpenWispr_OpenWispr.bundle and produce 'unhandled file'
                 // warnings on every build.
                 "Resources/models",
             ],
@@ -42,17 +42,17 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "WhispCoreTests",
-            dependencies: ["WhispCore"],
-            path: "Tests/WhispCoreTests"
+            name: "OpenWisprCoreTests",
+            dependencies: ["OpenWisprCore"],
+            path: "Tests/OpenWisprCoreTests"
         ),
         .testTarget(
-            name: "WhispIntegrationTests",
+            name: "OpenWisprIntegrationTests",
             dependencies: [
-                "WhispCore",
+                "OpenWisprCore",
                 .product(name: "MoonshineVoice", package: "Moonshine"),
             ],
-            path: "Tests/WhispIntegrationTests",
+            path: "Tests/OpenWisprIntegrationTests",
             resources: [
                 .copy("Fixtures"),
             ]

@@ -1,7 +1,7 @@
 import AppKit
 import QuartzCore
 
-/// A small floating pill shown near the top of the screen while Whisp is
+/// A small floating pill shown near the top of the screen while OpenWispr is
 /// listening. Non-activating panel so the user's focused app stays focused
 /// and our text injection actually goes to the right window.
 ///

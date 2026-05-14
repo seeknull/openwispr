@@ -1,5 +1,5 @@
 import XCTest
-@testable import WhispCore
+@testable import OpenWisprCore
 
 final class HotkeyStateMachineTests: XCTestCase {
     func testFirstPressStartsListening() {

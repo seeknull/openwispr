@@ -1,11 +1,11 @@
 import XCTest
 import MoonshineVoice
-@testable import WhispCore
+@testable import OpenWisprCore
 
 /// Drives a real `Transcriber` against a small WAV fixture and feeds the
 /// completed lines through `TranscriptBuffer`. This is the end-to-end check
 /// that the Moonshine xcframework loads correctly, that the bundled model
-/// works, and that Whisp's transcript shaping produces sensible output.
+/// works, and that OpenWispr's transcript shaping produces sensible output.
 final class EndToEndTests: XCTestCase {
     /// Locates the tiny-en model packaged inside the Moonshine xcframework.
     /// Returns nil (and the test skips) if neither the framework bundle nor
@@ -25,9 +25,9 @@ final class EndToEndTests: XCTestCase {
         // it relative to the source-file path.
         let here = URL(fileURLWithPath: #filePath)
         let workspaceRoot = here
-            .deletingLastPathComponent()  // WhispIntegrationTests
+            .deletingLastPathComponent()  // OpenWisprIntegrationTests
             .deletingLastPathComponent()  // Tests
-            .deletingLastPathComponent()  // whisp
+            .deletingLastPathComponent()  // openwispr
             .deletingLastPathComponent()  // workspace root
         let xcframework = workspaceRoot
             .appendingPathComponent("moonshine/swift/Moonshine.xcframework")

@@ -1,8 +1,8 @@
 import SwiftUI
-import WhispCore
+import OpenWisprCore
 
 struct SettingsView: View {
-    @ObservedObject var settings: WhispSettings
+    @ObservedObject var settings: OpenWisprSettings
     @ObservedObject var permissions: PermissionsManager
     let onCheckPermissions: () -> Void
 
@@ -15,7 +15,7 @@ struct SettingsView: View {
     enum Tab: Hashable { case general, permissions, about }
 
     init(
-        settings: WhispSettings,
+        settings: OpenWisprSettings,
         permissions: PermissionsManager,
         onCheckPermissions: @escaping () -> Void
     ) {
@@ -121,10 +121,10 @@ struct SettingsView: View {
                     Button(role: .destructive, action: { showHardResetConfirm = true }) {
                         Label("Hard Reset", systemImage: "exclamationmark.arrow.circlepath")
                     }
-                    .help("Clear all TCC grants for Whisp and quit. Use when permissions are stuck.")
+                    .help("Clear all TCC grants for OpenWispr and quit. Use when permissions are stuck.")
                     Spacer()
-                    Button("Restart Whisp") {
-                        permissions.restartWhisp()
+                    Button("Restart OpenWispr") {
+                        permissions.restartOpenWispr()
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!permissions.allGranted)
@@ -132,13 +132,13 @@ struct SettingsView: View {
                 .padding(.top, 8)
             }
             .padding()
-            .alert("Hard reset Whisp's permissions?", isPresented: $showHardResetConfirm) {
+            .alert("Hard reset OpenWispr's permissions?", isPresented: $showHardResetConfirm) {
                 Button("Cancel", role: .cancel) { }
                 Button("Reset and Quit", role: .destructive) {
                     permissions.hardReset()
                 }
             } message: {
-                Text("Whisp will clear all of its TCC entries (Microphone, Accessibility), open System Settings → Privacy & Security, and quit. From there you can remove any stale \"Whisp\" rows that remain visible by clicking the row and pressing the − button, then relaunch Whisp from /Applications or your dev build for a clean grant flow.")
+                Text("OpenWispr will clear all of its TCC entries (Microphone, Accessibility), open System Settings → Privacy & Security, and quit. From there you can remove any stale \"OpenWispr\" rows that remain visible by clicking the row and pressing the − button, then relaunch OpenWispr from /Applications or your dev build for a clean grant flow.")
             }
         }
     }
@@ -148,7 +148,7 @@ struct SettingsView: View {
     /// don't need to see it.
     private var staleEntryHint: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Whisp not showing up in System Settings? Use the + button.", systemImage: "exclamationmark.bubble.fill")
+            Label("OpenWispr not showing up in System Settings? Use the + button.", systemImage: "exclamationmark.bubble.fill")
                 .font(.callout.weight(.medium))
             Text("macOS 26 sometimes blocks unsigned apps from auto-appearing in Privacy & Security. The canonical workaround:")
                 .font(.caption)
@@ -157,15 +157,15 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("1.  Click **Open Settings** above. The System Settings pane opens.")
                 Text("2.  Click the **+** button at the bottom of the list.")
-                Text("3.  Navigate to **Whisp.app** (`Cmd+Shift+G` then paste the path below) and pick it.")
-                Text("4.  Toggle Whisp **on**. Whisp will see the grant within ~2s.")
+                Text("3.  Navigate to **OpenWispr.app** (`Cmd+Shift+G` then paste the path below) and pick it.")
+                Text("4.  Toggle OpenWispr **on**. OpenWispr will see the grant within ~2s.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
-                Text("Whisp.app path:")
+                Text("OpenWispr.app path:")
                     .font(.caption.weight(.medium))
                 Text(Bundle.main.bundleURL.path)
                     .font(.caption.monospaced())
@@ -234,12 +234,12 @@ struct SettingsView: View {
                 .scaledToFit()
                 .frame(width: 56, height: 56)
                 .foregroundStyle(.tint)
-            Text("Whisp").font(.title)
+            Text("OpenWispr").font(.title)
             Text("Open-source dictation for macOS, powered by Moonshine.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Link("github.com/your-org/whisp",
-                 destination: URL(string: "https://github.com/your-org/whisp")!)
+            Link("github.com/your-org/openwispr",
+                 destination: URL(string: "https://github.com/your-org/openwispr")!)
                 .font(.footnote)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

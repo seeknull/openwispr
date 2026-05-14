@@ -1,8 +1,8 @@
 import Foundation
 
-/// How Whisp inserts transcript text into the focused app.
+/// How OpenWispr inserts transcript text into the focused app.
 ///
-/// Both modes require the **Accessibility** permission so Whisp can post
+/// Both modes require the **Accessibility** permission so OpenWispr can post
 /// synthetic input events to the system.
 public enum InsertionMode: String, CaseIterable, Codable, Sendable {
     /// Save current clipboard → write transcript to clipboard → post Cmd+V →

@@ -2,14 +2,14 @@ import AppKit
 import MoonshineVoice
 import OSLog
 import SwiftUI
-import WhispCore
+import OpenWisprCore
 
 @main
-struct WhispApp: App {
+struct OpenWisprApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // Whisp is a menu-bar-only app, but SwiftUI's @main requires at
+        // OpenWispr is a menu-bar-only app, but SwiftUI's @main requires at
         // least one Scene. The Settings window is built manually in
         // MenuBarController so we have full control over its lifecycle.
         Settings { EmptyView() }
@@ -18,10 +18,10 @@ struct WhispApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
-    private let log = Logger(subsystem: "ai.whisp.dev", category: "AppDelegate")
+    private let log = Logger(subsystem: "dev.openwispr.app", category: "AppDelegate")
 
     let permissions = PermissionsManager()
-    let settings = WhispSettings.shared
+    let settings = OpenWisprSettings.shared
     let dictation = DictationController()
     private var injector: TextInjector!
     private var engine: DictationEngine!
@@ -100,11 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             log.warning("Bundled model not found; falling back to tiny-en at \(fallback, privacy: .public)")
             return (fallback, .tiny)
         }
-        fatalError("No usable Moonshine model bundled with Whisp.app")
+        fatalError("No usable Moonshine model bundled with OpenWispr.app")
     }
 }
 
 extension AppDelegate {
     /// Identifier MenuBarController stamps on its Settings NSWindow.
-    static let settingsWindowID: String = "WhispSettings"
+    static let settingsWindowID: String = "OpenWisprSettings"
 }

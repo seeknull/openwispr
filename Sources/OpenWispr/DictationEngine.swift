@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import MoonshineVoice
 import OSLog
-import WhispCore
+import OpenWisprCore
 
 /// Wraps `MicTranscriber` plus a `TranscriptBuffer` and drives the text
 /// injector. One instance lives for the lifetime of the app; `start()`
@@ -10,7 +10,7 @@ import WhispCore
 /// reloading the model.
 @MainActor
 final class DictationEngine {
-    private let log = Logger(subsystem: "ai.whisp.dev", category: "DictationEngine")
+    private let log = Logger(subsystem: "dev.openwispr.app", category: "DictationEngine")
 
     private let modelPath: String
     private let modelArch: ModelArch

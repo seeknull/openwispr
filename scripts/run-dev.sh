@@ -12,7 +12,7 @@
 # What it autodetects:
 #   - Moonshine.xcframework missing  → runs scripts/bootstrap.sh
 #   - Model directory missing        → offers to run scripts/download-models.sh
-#   - Whisp already running          → kills it before relaunch
+#   - OpenWispr already running          → kills it before relaunch
 #   - First run after a fresh build  → nudges you to verify Accessibility / Input Monitoring
 set -euo pipefail
 
@@ -50,13 +50,13 @@ if [ ! -d "$XCFRAMEWORK" ]; then
 fi
 
 # ---- 2. Models: detect missing default model ----
-MODEL_DIR="$WHISP_DIR/Sources/Whisp/Resources/models/medium-streaming-en/quantized"
+MODEL_DIR="$WHISP_DIR/Sources/OpenWispr/Resources/models/medium-streaming-en/quantized"
 if [ "$DO_MODELS" = 1 ] && [ ! -d "$MODEL_DIR" ]; then
     echo
     echo "==> No bundled STT model found at:"
-    echo "    Sources/Whisp/Resources/models/medium-streaming-en/quantized"
+    echo "    Sources/OpenWispr/Resources/models/medium-streaming-en/quantized"
     echo
-    echo "    Whisp will fall back to MoonshineVoice's bundled tiny-en model,"
+    echo "    OpenWispr will fall back to MoonshineVoice's bundled tiny-en model,"
     echo "    which works but is lower accuracy than medium-streaming-en (~280 MB)."
     echo
     read -p "    Download medium-streaming-en now? [y/N] " yn
@@ -73,25 +73,25 @@ if [ "$DO_CLEAN" = 1 ]; then
     rm -rf .build build
 fi
 
-# ---- 4. Kill any running Whisp so the new build can claim the menu-bar slot ----
-if pgrep -x Whisp >/dev/null; then
-    echo "==> Killing running Whisp instance"
-    pkill -x Whisp || true
+# ---- 4. Kill any running OpenWispr so the new build can claim the menu-bar slot ----
+if pgrep -x OpenWispr >/dev/null; then
+    echo "==> Killing running OpenWispr instance"
+    pkill -x OpenWispr || true
     sleep 0.3
 fi
 
 # ---- 5. Reset TCC grants if requested ----
 if [ "$DO_RESET" = 1 ]; then
-    echo "==> Resetting TCC grants for ai.whisp.dev"
-    tccutil reset Microphone     ai.whisp.dev 2>/dev/null || true
-    tccutil reset Accessibility  ai.whisp.dev 2>/dev/null || true
-    tccutil reset ListenEvent    ai.whisp.dev 2>/dev/null || true
+    echo "==> Resetting TCC grants for dev.openwispr.app"
+    tccutil reset Microphone     dev.openwispr.app 2>/dev/null || true
+    tccutil reset Accessibility  dev.openwispr.app 2>/dev/null || true
+    tccutil reset ListenEvent    dev.openwispr.app 2>/dev/null || true
     cat <<'EOF'
 
    IMPORTANT: tccutil reset clears the grant decision but leaves the
-   "Whisp" row visible in System Settings (bound to the old CDHash).
+   "OpenWispr" row visible in System Settings (bound to the old CDHash).
    Open System Settings → Privacy & Security → Accessibility and
-   Input Monitoring; if Whisp appears in either list, **select it and
+   Input Monitoring; if OpenWispr appears in either list, **select it and
    press the −** button to fully remove the stale row. Then come back
    and grant fresh — the new entry will be bound to the current
    signature.
@@ -100,7 +100,7 @@ EOF
 fi
 
 # ---- 6. Build ----
-APP="$WHISP_DIR/build/Whisp.app"
+APP="$WHISP_DIR/build/OpenWispr.app"
 # Track whether the build produced a new signature so we can nudge about TCC.
 PREV_HASH=""
 if [ -d "$APP" ]; then
@@ -120,28 +120,28 @@ fi
 NEW_HASH="$(codesign -dvvv "$APP" 2>&1 | awk -F'=' '/^CDHash=/{print $2; exit}')"
 
 # ---- 7. Auto-reset TCC when signature drifted ----
-# Done BEFORE launch so Whisp sees the cleared state on startup and
+# Done BEFORE launch so OpenWispr sees the cleared state on startup and
 # auto-opens its FixupSheet onboarding flow.
 if [ -n "$PREV_HASH" ] && [ "$PREV_HASH" != "$NEW_HASH" ] && [ "$DO_RESET" = 0 ]; then
     cat <<EOF
 
-==> Whisp's code signature changed since the last build:
+==> OpenWispr's code signature changed since the last build:
        was: $PREV_HASH
        now: $NEW_HASH
     Your previous TCC grants won't match this binary, so they're being
-    auto-reset. Whisp's onboarding sheet will walk you through the rest.
+    auto-reset. OpenWispr's onboarding sheet will walk you through the rest.
 
 EOF
-    tccutil reset Accessibility ai.whisp.dev 2>/dev/null || true
-    tccutil reset ListenEvent   ai.whisp.dev 2>/dev/null || true
+    tccutil reset Accessibility dev.openwispr.app 2>/dev/null || true
+    tccutil reset ListenEvent   dev.openwispr.app 2>/dev/null || true
 fi
 
 # ---- 8. Launch via `open` so LaunchServices registers the bundle ----
 echo "==> Launching $APP"
 open "$APP"
 
-# ---- 9. Tail Whisp logs if requested ----
+# ---- 9. Tail OpenWispr logs if requested ----
 if [ "$DO_LOGS" = 1 ]; then
-    echo "==> Streaming Whisp logs (Ctrl+C to stop)"
-    exec log stream --predicate 'subsystem == "ai.whisp.dev"' --level=debug
+    echo "==> Streaming OpenWispr logs (Ctrl+C to stop)"
+    exec log stream --predicate 'subsystem == "dev.openwispr.app"' --level=debug
 fi

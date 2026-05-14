@@ -1,12 +1,12 @@
 import XCTest
-@testable import WhispCore
+@testable import OpenWisprCore
 
-// SelfTestResult is defined in the app target, not WhispCore — we
+// SelfTestResult is defined in the app target, not OpenWisprCore — we
 // re-declare a compatible structure here for testing the aggregation
 // logic, since the .ok / .warning / .failure precedence is the only
 // non-trivial bit.
 //
-// (When we extract SelfTest into WhispCore for full testability, this
+// (When we extract SelfTest into OpenWisprCore for full testability, this
 // shadow file goes away.)
 
 private struct AggregateTest {

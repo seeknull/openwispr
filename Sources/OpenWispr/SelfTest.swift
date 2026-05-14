@@ -1,16 +1,16 @@
 import Foundation
 import OSLog
 
-/// Verifies that every subsystem Whisp depends on is actually working,
-/// not just present. The user can't tell whether Whisp is broken until
+/// Verifies that every subsystem OpenWispr depends on is actually working,
+/// not just present. The user can't tell whether OpenWispr is broken until
 /// they try the hotkey and watch nothing happen; SelfTest catches that
 /// at launch and shows a colored menu bar icon so failure modes are
 /// visible immediately.
 ///
 /// Each check is independent and has three outcomes:
 ///   - `.ok` — verified working.
-///   - `.warning(message)` — degraded but Whisp still works.
-///   - `.failure(message)` — Whisp won't work until the user fixes this.
+///   - `.warning(message)` — degraded but OpenWispr still works.
+///   - `.failure(message)` — OpenWispr won't work until the user fixes this.
 ///
 /// Overall result is `.ok` if all checks pass, `.warning` if any warning
 /// and no failures, `.failure` if any failure.
@@ -64,7 +64,7 @@ struct SelfTestResult: Equatable {
 
 @MainActor
 final class SelfTest {
-    private let log = Logger(subsystem: "ai.whisp.dev", category: "SelfTest")
+    private let log = Logger(subsystem: "dev.openwispr.app", category: "SelfTest")
 
     private let permissions: PermissionsManager
     private let modelPath: String
@@ -108,7 +108,7 @@ final class SelfTest {
         switch permissions.accessibility {
         case .granted:        return .ok
         case .denied:         return .failure("Denied in System Settings — hotkey and paste will not work")
-        case .notDetermined:  return .failure("Not granted yet — click Open Settings in Whisp")
+        case .notDetermined:  return .failure("Not granted yet — click Open Settings in OpenWispr")
         }
     }
 

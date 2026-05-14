@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Whisp</string>
+    <string>OpenWispr</string>
     <key>CFBundleExecutable</key>
-    <string>Whisp</string>
+    <string>OpenWispr</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>ai.whisp.dev</string>
+    <string>dev.openwispr.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Whisp</string>
+    <string>OpenWispr</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -27,11 +27,11 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Whisp contributors. MIT-licensed.</string>
+    <string>Copyright © 2026 OpenWispr contributors. MIT-licensed.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Whisp listens to your microphone to transcribe speech into the focused app.</string>
+    <string>OpenWispr listens to your microphone to transcribe speech into the focused app.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Whisp posts paste events to type the transcript into the focused app.</string>
+    <string>OpenWispr posts paste events to type the transcript into the focused app.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

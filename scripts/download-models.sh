@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Download the default Moonshine STT model that Whisp ships with.
+# Download the default Moonshine STT model that OpenWispr ships with.
 #
 # Usage:
 #   ./scripts/download-models.sh [model]
 #
 # `model` defaults to `medium-streaming-en`. Other options: `tiny-en`,
 # `small-streaming-en`, `medium-streaming-en`. The model files are placed
-# under Sources/Whisp/Resources/models/<model>/quantized so the release
+# under Sources/OpenWispr/Resources/models/<model>/quantized so the release
 # build script picks them up automatically.
 set -euo pipefail
 
@@ -14,7 +14,7 @@ MODEL="${1:-medium-streaming-en}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WHISP_DIR="$(dirname "$SCRIPT_DIR")"
-TARGET_DIR="$WHISP_DIR/Sources/Whisp/Resources/models/$MODEL/quantized"
+TARGET_DIR="$WHISP_DIR/Sources/OpenWispr/Resources/models/$MODEL/quantized"
 BASE_URL="https://download.moonshine.ai/model/$MODEL/quantized"
 
 # Components per model. medium-streaming-en is the default; the others have

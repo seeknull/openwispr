@@ -1,15 +1,15 @@
 # Architecture
 
-Whisp is intentionally small. This doc gives the 10-minute tour so you
+OpenWispr is intentionally small. This doc gives the 10-minute tour so you
 know what file to open when you want to change something.
 
 ## Layers
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  Whisp (executable target)         AppKit + SwiftUI  │
+│  OpenWispr (executable target)         AppKit + SwiftUI  │
 │  ────────────────────────────────  AVFoundation      │
-│  WhispApp + AppDelegate            ApplicationServices│
+│  OpenWisprApp + AppDelegate            ApplicationServices│
 │  MenuBarController                                   │
 │  HotkeyMonitor       (NSEvent global monitor)        │
 │  DictationEngine ──────────────────── MoonshineVoice │
@@ -18,7 +18,7 @@ know what file to open when you want to change something.
 │  SelfTest                                            │
 │  Settings + SettingsView + ListeningHUD              │
 ├──────────────────────────────────────────────────────┤
-│  WhispCore (library target)        Foundation only   │
+│  OpenWisprCore (library target)        Foundation only   │
 │  ──────────────────────────────                      │
 │  DictationController  ← single source of truth       │
 │  HotkeyStateMachine                                  │
@@ -29,18 +29,18 @@ know what file to open when you want to change something.
 └──────────────────────────────────────────────────────┘
 ```
 
-- **WhispCore** is platform-agnostic Foundation code. Everything in it
+- **OpenWisprCore** is platform-agnostic Foundation code. Everything in it
   is unit-testable without spinning up an event loop, a window server,
   or the Moonshine engine.
-- **Whisp** is the AppKit + SwiftUI shell.
+- **OpenWispr** is the AppKit + SwiftUI shell.
 
-The cardinal rule: **anything testable belongs in WhispCore.** If you
-find yourself reaching for `import AppKit` in WhispCore, the design
+The cardinal rule: **anything testable belongs in OpenWisprCore.** If you
+find yourself reaching for `import AppKit` in OpenWisprCore, the design
 has slipped — back out and find another seam.
 
 ## Lifetime
 
-1. `@main WhispApp` boots, instantiates `AppDelegate`.
+1. `@main OpenWisprApp` boots, instantiates `AppDelegate`.
 2. `AppDelegate.applicationDidFinishLaunching`:
    - Sets `NSApp` to `.accessory` (menu bar only, no Dock icon).
    - Locates the bundled model (`Resources/models/medium-streaming-en/...`,
@@ -85,7 +85,7 @@ start, engine error) keep its bookkeeping in sync. Pure function of
 ## Hotkey: NSEvent over CGEventTap
 
 The hotkey monitor uses `NSEvent.addGlobalMonitorForEvents` (plus a
-local monitor for when Whisp itself has focus) instead of
+local monitor for when OpenWispr itself has focus) instead of
 `CGEventTap`. Two reasons:
 
 1. **Permissions.** `CGEventTap` needs the Input Monitoring TCC grant,
@@ -160,7 +160,7 @@ such hazard.
 
 The app uses Swift 6.1 strict concurrency.
 
-- `WhispCore` is `Sendable` throughout. Its mutating methods take
+- `OpenWisprCore` is `Sendable` throughout. Its mutating methods take
   `inout` and never reference shared state.
 - App-layer types are `@MainActor`. NSEvent monitor callbacks run on
   the main run loop; the dispatcher inside `HotkeyMonitor.handle` hops
@@ -172,7 +172,7 @@ to MainActor before invoking the text injector.
 
 ## Why a menu-bar app?
 
-Whisp is global by nature — it has no window of its own when you use
+OpenWispr is global by nature — it has no window of its own when you use
 it, because it types into whatever else is focused. A dockless menu-
 bar agent matches that mental model and is the right `LSUIElement` /
 `NSApp.setActivationPolicy(.accessory)` shape.
