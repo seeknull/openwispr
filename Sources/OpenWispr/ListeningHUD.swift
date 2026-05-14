@@ -2,32 +2,29 @@ import AppKit
 import QuartzCore
 
 /// Tiny translucent pill that floats near the bottom of the screen while
-/// OpenWispr is listening. Icon-only — a pulsing red record dot next to a
-/// small waveform glyph. No text, no hotkey reminder (the menu-bar icon
-/// tooltip carries that).
+/// OpenWispr is listening. Shows a pulsing red record dot + a 3-bar
+/// equalizer that animates from live microphone input level.
 ///
 /// ## Design choices
 ///
-/// - **Translucent**, not solid: `NSVisualEffectView` with the
-///   `.hudWindow` material so it blends with whatever's behind it.
-///   The red tint is at a low opacity so the pill never makes content
-///   underneath unreadable.
-/// - **Icon-only**: the previous label "Listening… Fn+Option to stop"
-///   was both wide and noisy. Two glyphs convey the same state with
-///   less visual footprint.
-/// - **Bottom-center**: out of the way of menu bars, window chrome,
-///   and active editing areas which tend to live near the top.
+/// - **Translucent** `NSVisualEffectView` blur with a 12% red tint.
+///   Never makes the content underneath unreadable.
+/// - **3-bar visualizer**, not text: the bars move with the mic input
+///   so the user can see at a glance that the microphone is actually
+///   hearing them. Solves the "is it on?" doubt without copy.
+/// - **Bottom-center placement**: out of the way of menu bars, window
+///   chrome, and active editing areas which tend to live near the top.
 ///
 /// ## Why AppKit and not SwiftUI
 ///
-/// An earlier SwiftUI implementation with `Circle().animation(...)`
-/// inside an `NSHostingView` crashed the app on the second toggle when
-/// SwiftUI's animation driver kept poking at a view whose host window
-/// had been ordered out. Plain AppKit + Core Animation doesn't have
-/// that hazard.
+/// An earlier SwiftUI implementation crashed the app on the second
+/// toggle when SwiftUI's animation driver kept poking at a view whose
+/// host window had been ordered out. Plain AppKit + Core Animation
+/// has no such hazard.
 @MainActor
 final class ListeningHUD {
     private var panel: NSPanel?
+    private var contentView: HUDContentView?
 
     func show() {
         guard panel == nil else { return }
@@ -62,36 +59,49 @@ final class ListeningHUD {
         panel.orderFrontRegardless()
         contentView.startPulsing()
         self.panel = panel
+        self.contentView = contentView
     }
 
     func hide() {
-        if let pulser = panel?.contentView as? HUDContentView {
-            pulser.stopPulsing()
-        }
+        contentView?.stopPulsing()
         panel?.orderOut(nil)
         panel = nil
+        contentView = nil
+    }
+
+    /// Update the bar visualizer with a fresh mic level (0...1). Safe
+    /// to call at audio-tap rates; the view animates short, so frequent
+    /// updates feel smooth without flooding the layer tree.
+    func setLevel(_ level: Float) {
+        contentView?.setLevel(level)
     }
 }
 
-/// Translucent capsule: pulsing red dot + waveform glyph.
+/// Translucent capsule: pulsing red dot + 3-bar audio level visualizer.
 @MainActor
 private final class HUDContentView: NSView {
     private static let height: CGFloat = 26
     private static let dotDiameter: CGFloat = 7
     private static let leadingInset: CGFloat = 11
-    private static let dotToIconGap: CGFloat = 7
-    private static let iconSize: CGFloat = 13
+    private static let dotToBarsGap: CGFloat = 7
+    private static let barWidth: CGFloat = 2.5
+    private static let barSpacing: CGFloat = 2.5
+    private static let barCount: Int = 3
     private static let trailingInset: CGFloat = 11
+    private static let minBarHeight: CGFloat = 4
+    private static let maxBarHeight: CGFloat = 16
 
     private let dotLayer = CAShapeLayer()
     private let visualEffect = NSVisualEffectView()
-    private let iconView = NSImageView()
+    private var barLayers: [CALayer] = []
 
     override var intrinsicContentSize: NSSize {
+        let barsBlockWidth = CGFloat(Self.barCount) * Self.barWidth
+            + CGFloat(Self.barCount - 1) * Self.barSpacing
         let width = Self.leadingInset
             + Self.dotDiameter
-            + Self.dotToIconGap
-            + Self.iconSize
+            + Self.dotToBarsGap
+            + barsBlockWidth
             + Self.trailingInset
         return NSSize(width: width, height: Self.height)
     }
@@ -103,7 +113,7 @@ private final class HUDContentView: NSView {
         wantsLayer = true
         setupBlur()
         setupDot()
-        setupIcon()
+        setupBars()
     }
 
     required init?(coder: NSCoder) { fatalError("not implemented") }
@@ -119,8 +129,6 @@ private final class HUDContentView: NSView {
         visualEffect.layer?.masksToBounds = true
         addSubview(visualEffect)
 
-        // Very subtle red wash — just enough that the pill reads as
-        // "this is the listening state". 12% so it stays translucent.
         let tint = CALayer()
         tint.frame = bounds
         tint.backgroundColor = NSColor.systemRed.withAlphaComponent(0.12).cgColor
@@ -142,28 +150,45 @@ private final class HUDContentView: NSView {
         layer?.addSublayer(dotLayer)
     }
 
-    private func setupIcon() {
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        let cfg = NSImage.SymbolConfiguration(pointSize: Self.iconSize, weight: .medium)
-        iconView.image = NSImage(systemSymbolName: "waveform",
-                                 accessibilityDescription: "Listening")?
-            .withSymbolConfiguration(cfg)
-        // Tint the symbol with the system label color so it adapts to
-        // light/dark mode and reads well over the blur.
-        iconView.contentTintColor = .labelColor
-        addSubview(iconView)
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(
-                equalTo: leadingAnchor,
-                constant: Self.leadingInset + Self.dotDiameter + Self.dotToIconGap
-            ),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: Self.iconSize),
-            iconView.heightAnchor.constraint(equalToConstant: Self.iconSize),
-        ])
+    private func setupBars() {
+        let startX = Self.leadingInset + Self.dotDiameter + Self.dotToBarsGap
+        for i in 0..<Self.barCount {
+            let layer = CALayer()
+            let x = startX + CGFloat(i) * (Self.barWidth + Self.barSpacing)
+            let height = Self.minBarHeight
+            let y = (bounds.height - height) / 2
+            layer.frame = NSRect(x: x, y: y, width: Self.barWidth, height: height)
+            layer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.85).cgColor
+            layer.cornerRadius = Self.barWidth / 2
+            self.layer?.addSublayer(layer)
+            barLayers.append(layer)
+        }
     }
 
-    /// Smooth opacity pulse on the red dot.
+    /// Drive the bars from a 0...1 mic level. Each bar gets a slightly
+    /// different scale + phase so the visualization looks like activity,
+    /// not a single bar tripled.
+    func setLevel(_ level: Float) {
+        let l = max(0, min(1, CGFloat(level)))
+        // Per-bar coefficients give a slight visual variation — the
+        // center bar typically loudest, outer bars trail slightly.
+        let coefficients: [CGFloat] = [0.80, 1.00, 0.70]
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.08)
+        for (i, layer) in barLayers.enumerated() {
+            let scaled = l * coefficients[i % coefficients.count]
+            let h = Self.minBarHeight + (Self.maxBarHeight - Self.minBarHeight) * scaled
+            var frame = layer.frame
+            frame.size.height = h
+            frame.origin.y = (bounds.height - h) / 2
+            layer.frame = frame
+        }
+        CATransaction.commit()
+    }
+
+    /// Smooth opacity pulse on the red dot. Independent of the bars —
+    /// the dot pulses on the listening cadence, the bars react to mic
+    /// activity.
     func startPulsing() {
         let opacity = CABasicAnimation(keyPath: "opacity")
         opacity.fromValue = 1.0

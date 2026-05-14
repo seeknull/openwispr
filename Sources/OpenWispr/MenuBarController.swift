@@ -15,6 +15,7 @@ final class MenuBarController: NSObject {
     private let settings: OpenWisprSettings
     private let selfTest: SelfTest
     private let hud = ListeningHUD()
+    private let levelMeter: AudioLevelMeter
     private var settingsWindow: NSWindow?
     private var dictationObserver: UUID?
     private var lastSelfTest: SelfTestResult?
@@ -34,6 +35,17 @@ final class MenuBarController: NSObject {
         self.permissions = permissions
         self.settings = settings
         self.selfTest = selfTest
+
+        // Build the level meter before super.init so we can capture
+        // a weak HUD reference inside its closure. The closure fires
+        // on an audio thread; hop to main before touching the HUD.
+        let hud = self.hud
+        self.levelMeter = AudioLevelMeter { level in
+            DispatchQueue.main.async {
+                hud.setLevel(level)
+            }
+        }
+
         super.init()
 
         configureStatusItem()
@@ -132,16 +144,23 @@ final class MenuBarController: NSObject {
         switch state {
         case .idle:
             hud.hide()
+            levelMeter.stop()
             hotkey.syncListeningState(false)
         case .starting:
             break  // brief; idle icon is fine
         case .listening:
             if settings.showHUD { hud.show() }
+            // Start the level meter alongside the engine. It uses its
+            // own AVAudioEngine tap on the input node, parallel to
+            // MoonshineVoice's, so the two coexist.
+            levelMeter.start()
             hotkey.syncListeningState(true)
         case .stopping:
             hud.hide()
+            levelMeter.stop()
         case .error:
             hud.hide()
+            levelMeter.stop()
             hotkey.syncListeningState(false)
         }
         updateIconAndTooltip()
