@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import OSLog
 import WhispCore
 

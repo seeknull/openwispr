@@ -5,8 +5,7 @@ Rough priority order. Issues and PRs welcome on any of these.
 ## v0.2
 
 - [ ] **Hotkey rebinding** in Settings (currently hard-coded to Fn+Option).
-- [ ] **Launch at login** via `SMAppService` (the `launchAtLogin` toggle
-      already exists in `Settings.swift` but is not yet wired up).
+- [ ] **Launch at login** via `SMAppService`.
 - [ ] **Press-and-hold mode** as an alternative to toggle.
 - [ ] Pin the **model picker** in Settings so users can swap between
       tiny/small/medium without rebuilding the .app.

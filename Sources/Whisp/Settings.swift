@@ -10,9 +10,8 @@ import WhispCore
 final class WhispSettings: ObservableObject {
     static let shared = WhispSettings()
 
-    @AppStorage("insertionMode") var insertionModeRaw: String = InsertionMode.clipboardPaste.rawValue
-    @AppStorage("launchAtLogin")  var launchAtLogin: Bool = false
-    @AppStorage("showHUD")        var showHUD: Bool = true
+    @AppStorage("insertionMode")      var insertionModeRaw: String = InsertionMode.clipboardPaste.rawValue
+    @AppStorage("showHUD")            var showHUD: Bool = true
     @AppStorage("hotkeyModifiersCSV") var hotkeyModifiersCSV: String = "fn,option"
 
     var insertionMode: InsertionMode {

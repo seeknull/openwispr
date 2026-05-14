@@ -28,11 +28,11 @@ roadmap (see [docs/roadmap.md](docs/roadmap.md)).
 ```
 ┌─────────────────────────┐
 │  Fn + Option pressed    │
-│  (CGEventTap)           │
+│  (NSEvent global mon.)  │
 └────────────┬────────────┘
              ▼
 ┌─────────────────────────┐         ┌───────────────────────────┐
-│  HotkeyStateMachine     │────────▶│  DictationEngine          │
+│  DictationController    │────────▶│  DictationEngine          │
 │  (WhispCore, testable)  │         │  ↳ MicTranscriber         │
 └─────────────────────────┘         │     (MoonshineVoice)      │
                                     └──────────────┬────────────┘
@@ -49,23 +49,27 @@ roadmap (see [docs/roadmap.md](docs/roadmap.md)).
                                     └───────────────────────────┘
 ```
 
+A `SelfTest` runs on launch and on demand, checking the four things
+that have to be healthy for dictation to work. The menu bar icon
+reflects the result: clean waveform = healthy, red dot = listening,
+red triangle = failure (hover the icon for a tooltip).
+
 Hardened by:
 
 - `WhispCore` — pure Swift, no AppKit imports, all state machines are
   testable without a UI.
 - `Whisp` — the menu bar app: hotkey monitor, dictation engine, settings,
-  HUD.
+  HUD, self-test.
 
 ## Permissions
 
-Whisp asks for three macOS privacy permissions on first launch. All three
-are required for the app to work:
+Whisp asks for **two** macOS privacy permissions on first launch. Both
+are required:
 
 | Permission | Why | When prompted |
 | --- | --- | --- |
-| **Microphone** | Capture audio to transcribe. | Auto, on first start. |
-| **Accessibility** | Post Cmd+V or synthetic keystrokes into the focused app. | From the Settings → Permissions tab. macOS opens System Settings → Privacy & Security → Accessibility; toggle Whisp on. |
-| **Input Monitoring** | Watch for the Fn+Option hotkey using a CGEventTap. | From the Settings → Permissions tab. macOS opens System Settings → Privacy & Security → Input Monitoring; toggle Whisp on. |
+| **Microphone** | Capture audio to transcribe. | From the Settings → Permissions tab. Standard macOS prompt. |
+| **Accessibility** | Two things: (1) post Cmd+V or synthetic keystrokes into the focused app, and (2) observe the global Fn+Option hotkey via `NSEvent.addGlobalMonitorForEvents`. | From the Settings → Permissions tab. macOS opens System Settings → Privacy & Security → Accessibility; toggle Whisp on, then click **Restart Whisp**. |
 
 See [docs/permissions.md](docs/permissions.md) for the full TCC story and
 what each prompt looks like.
@@ -141,12 +145,11 @@ swift run Whisp                  # launch raw executable (no .app bundle)
 ### About TCC permissions and rebuilds
 
 macOS TCC keys permission grants by bundle id **and** code-signing identity.
-Whisp's dev builds use ad-hoc signing, so the signature hash changes per build
-and macOS may invalidate your Accessibility / Input Monitoring grants. The
-`run-dev.sh` output flags this when it detects a hash change. Fix: toggle
-Whisp off/on in System Settings → Privacy & Security (~20 seconds, same
-workflow VoiceInk and OpenSuperWhisper use). See
-[docs/troubleshooting.md](docs/troubleshooting.md).
+Whisp's dev builds use ad-hoc signing, so the signature hash changes per
+build and macOS may invalidate your Accessibility grant. The `run-dev.sh`
+output flags this when it detects a hash change, and the in-app **Hard
+Reset** button (Settings → Permissions) clears everything for re-granting.
+See [docs/troubleshooting.md](docs/troubleshooting.md).
 
 See [docs/building.md](docs/building.md) for prerequisites
 (Xcode 15+, CMake, etc.) and the dev workflow.
@@ -159,19 +162,16 @@ swift test --filter WhispCoreTests                  # fast, no model load
 swift test --filter WhispIntegrationTests           # WAV → transcript
 ```
 
-Three test targets:
+Two test targets:
 
-- **WhispCoreTests** — pure logic (state machine, transcript buffer,
-  hotkey config, insertion modes). Runs in a fraction of a second, used
-  in CI on every push.
+- **WhispCoreTests** — pure logic (state machine, dictation controller,
+  transcript buffer, hotkey config, insertion modes, self-test result
+  aggregation, HUD lifecycle). Runs in a fraction of a second; CI
+  runs this on every push.
 - **WhispIntegrationTests** — loads Moonshine's bundled `tiny-en` model
   and transcribes a WAV fixture. Confirms the SwiftPM dep resolves, the
   xcframework links, and the transcript shape is what `DictationEngine`
   expects.
-- **WhispUITests** — XCUITest skeleton for the Settings window. SwiftPM
-  cannot run XCUITests directly; open `Package.swift` in Xcode (or run
-  `./scripts/generate-xcodeproj.sh` for guidance) and use the standard
-  ⌘U flow.
 
 ## Layout
 
@@ -180,6 +180,7 @@ whisp/
 ├── Package.swift
 ├── Sources/
 │   ├── WhispCore/                  # pure logic, no AppKit
+│   │   ├── DictationController.swift   # single source of truth state
 │   │   ├── DictationState.swift
 │   │   ├── HotkeyConfig.swift
 │   │   ├── HotkeyStateMachine.swift
@@ -188,13 +189,14 @@ whisp/
 │   └── Whisp/                      # macOS menu-bar app
 │       ├── WhispApp.swift          # @main + AppDelegate
 │       ├── MenuBarController.swift
-│       ├── HotkeyMonitor.swift     # CGEventTap for Fn+Option
+│       ├── HotkeyMonitor.swift     # NSEvent monitor for Fn+Option
 │       ├── DictationEngine.swift   # MicTranscriber wrapper
 │       ├── TextInjector.swift      # clipboard paste / keystrokes
 │       ├── PermissionsManager.swift
+│       ├── SelfTest.swift          # launch-time health check
 │       ├── Settings.swift          # @AppStorage prefs
 │       ├── SettingsView.swift      # SwiftUI prefs window
-│       ├── ListeningHUD.swift      # floating "listening…" pill
+│       ├── ListeningHUD.swift      # AppKit floating "listening…" pill
 │       └── Resources/
 │           ├── Info.plist
 │           ├── Whisp.entitlements
@@ -202,21 +204,21 @@ whisp/
 │           └── models/             # downloaded by scripts/download-models.sh
 ├── Tests/
 │   ├── WhispCoreTests/
-│   ├── WhispIntegrationTests/
-│   │   ├── EndToEndTests.swift
-│   │   └── Fixtures/beckett.wav
-│   └── WhispUITests/
+│   └── WhispIntegrationTests/
+│       ├── EndToEndTests.swift
+│       └── Fixtures/beckett.wav
 ├── scripts/
 │   ├── bootstrap.sh                # build Moonshine.xcframework
 │   ├── download-models.sh          # fetch STT model
 │   ├── build-release.sh            # produce Whisp.app + zip
-│   └── generate-xcodeproj.sh
+│   └── run-dev.sh                  # rebuild + relaunch with autodetect
 └── docs/
     ├── architecture.md
     ├── building.md
     ├── distribution.md
     ├── permissions.md
-    └── roadmap.md
+    ├── roadmap.md
+    └── troubleshooting.md
 ```
 
 ## Contributing
