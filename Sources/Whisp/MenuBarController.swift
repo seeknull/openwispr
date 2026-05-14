@@ -14,7 +14,6 @@ final class MenuBarController: NSObject {
     private let settings: WhispSettings
     private let hud = ListeningHUD()
     private var settingsWindow: NSWindow?
-    private var fixupWindow: NSWindow?
     private var currentState: DictationState = .idle
 
     init(
@@ -158,6 +157,11 @@ final class MenuBarController: NSObject {
         }
     }
 
+    /// Build (lazily) and surface the Settings window. We build the
+    /// NSWindow + NSHostingController by hand for full lifecycle control;
+    /// the macOS 26 crash that previously plagued this path was triggered
+    /// by a Timer.publish poll inside the SwiftUI view, not by the
+    /// hosting setup itself. SettingsView no longer polls.
     @objc func openSettings() {
         permissions.refresh()
         if settingsWindow == nil {
@@ -167,13 +171,32 @@ final class MenuBarController: NSObject {
                 onCheckPermissions: { [weak self] in self?.permissions.refresh() }
             )
             let host = NSHostingController(rootView: view)
-            let window = NSWindow(contentViewController: host)
+            host.sizingOptions = []
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentViewController = host
             window.title = "Whisp Settings"
-            window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
+            // Stay visible when System Settings (or any other app) steals
+            // focus. Default behaviour for accessory-policy apps is to
+            // hide the window on deactivate, which made the Settings
+            // window vanish every time the user clicked "Open Settings".
+            window.hidesOnDeactivate = false
+            // Float above other apps so the user can see live status
+            // updates while interacting with System Settings.
+            window.level = .floating
+            // `canJoinAllSpaces` and `moveToActiveSpace` are mutually
+            // exclusive — combining them throws NSInvalidArgument and
+            // aborts the app. Just join all spaces so the window stays
+            // visible across desktops.
+            window.collectionBehavior = [.canJoinAllSpaces]
             window.center()
-            window.identifier = NSUserInterfaceItemIdentifier("WhispSettingsWindow")
-            window.setAccessibilityIdentifier("WhispSettingsWindow")
+            window.identifier = NSUserInterfaceItemIdentifier(AppDelegate.settingsWindowID)
+            window.setAccessibilityIdentifier(AppDelegate.settingsWindowID)
             settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -184,51 +207,12 @@ final class MenuBarController: NSObject {
         openSettings()
     }
 
-    /// Show the rebuild-rescue sheet. Used both automatically on launch
-    /// (when PermissionsManager flags a signature mismatch) and from the
-    /// menu bar's "Reset Permissions…" item.
-    func openFixupSheet(autoReset: Bool) {
+    /// "Reset Permissions…" menu action. Clears TCC entries and opens
+    /// Settings → Permissions tab so the user can re-grant.
+    func runFixupFlow() {
         permissions.refresh()
-        if autoReset {
-            // Run tccutil first so the user opens System Settings into a
-            // cleaned-up state. Stale rows still show, but the underlying
-            // decision is cleared, which avoids confusion when they re-toggle.
-            permissions.runAutoFixup()
-        }
-        if fixupWindow == nil {
-            let view = FixupSheetView(
-                permissions: permissions,
-                onClose: { [weak self] in self?.fixupWindow?.close() }
-            )
-            let host = NSHostingController(rootView: view)
-            // Pin the hosting controller to the view's intrinsic size and
-            // disable SwiftUI's auto-resize negotiation with the window.
-            // Without this, switching steps inside the view triggers a
-            // window constraint thrash that macOS 26 turns into a fatal
-            // exception (-[NSApplication _crashOnException:]).
-            host.sizingOptions = []
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
-                styleMask: [.titled, .closable],
-                backing: .buffered,
-                defer: false
-            )
-            window.contentViewController = host
-            window.title = "Whisp — Re-grant permissions"
-            window.isReleasedWhenClosed = false
-            // Float above other windows so when the user opens System
-            // Settings to grant a permission, the fixup window stays
-            // visible and they can see the live status update.
-            window.level = .floating
-            // Stay open across spaces and when other apps activate.
-            window.collectionBehavior = [.canJoinAllSpaces, .moveToActiveSpace]
-            window.center()
-            window.identifier = NSUserInterfaceItemIdentifier("WhispFixupWindow")
-            window.setAccessibilityIdentifier("WhispFixupWindow")
-            fixupWindow = window
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        fixupWindow?.makeKeyAndOrderFront(nil)
+        permissions.runAutoFixup()
+        openSettings()
     }
 
     @objc private func openAbout() {
@@ -237,7 +221,7 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func resetPermissions() {
-        openFixupSheet(autoReset: true)
+        runFixupFlow()
     }
 
     @objc private func quit() {

@@ -4,25 +4,30 @@ import OSLog
 import SwiftUI
 import WhispCore
 
+/// Identifies the SwiftUI-managed Settings window so the AppDelegate can
+/// programmatically open it via the `openWindow` environment action.
+private let settingsWindowID = "WhispSettingsWindow"
+
 @main
 struct WhispApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // Whisp is a menu-bar-only app, but SwiftUI's @main requires a
-        // Scene declaration. We supply a Settings scene that we never
-        // actually surface (NSApp activation policy is `.accessory`),
-        // so this remains a no-op in practice.
+        // Whisp is a menu-bar-only app, but SwiftUI's @main requires at
+        // least one Scene. The window itself is built manually in
+        // MenuBarController so we have full control over its lifecycle —
+        // crucial under macOS 26 where SwiftUI's Settings scene doesn't
+        // surface reliably under `.accessory` activation policy.
         Settings { EmptyView() }
     }
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private let log = Logger(subsystem: "ai.whisp.app", category: "AppDelegate")
 
-    private let permissions = PermissionsManager()
-    private let settings = WhispSettings.shared
+    let permissions = PermissionsManager()
+    let settings = WhispSettings.shared
     private var injector: TextInjector!
     private var engine: DictationEngine!
     private var hotkey: HotkeyMonitor!
@@ -56,20 +61,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log.warning("Could not start event tap — Input Monitoring permission may be missing")
         }
 
-        // First-launch onboarding: if any AX/IM permission is missing,
-        // open the FixupSheet. It's the right surface whether this is a
-        // genuine first run or a rebuild that broke previous grants —
-        // both cases need the same "open System Settings, toggle on" flow.
-        //
-        // We only auto-run tccutil reset when we know the signature drifted
-        // (so genuine first-launch users don't see a reset they didn't ask
-        // for). When triggered manually via the menu bar "Reset Permissions…"
-        // item, we always reset.
+        // First-launch onboarding: open the Settings window's Permissions
+        // tab if anything is missing. If a signature drift was detected,
+        // pre-clear stale TCC entries with tccutil so the user opens System
+        // Settings into a clean state.
         permissions.refresh()
-        if !permissions.allGranted {
-            let autoReset = permissions.signatureChangedSinceLastGrant
-            log.info("Permissions incomplete on launch; opening fixup sheet (autoReset: \(autoReset, privacy: .public))")
-            menuBar.openFixupSheet(autoReset: autoReset)
+        // Always surface Settings on launch when permissions are missing OR
+        // when the build signature drifted (since a stale grant for a
+        // different CDHash can return `allGranted == true` even though TCC
+        // will reject the actual API calls). Letting the user see the
+        // current state on launch is friendlier than a silent menu-bar app
+        // that doesn't respond to the hotkey.
+        if !permissions.allGranted || permissions.signatureChangedSinceLastGrant {
+            if permissions.signatureChangedSinceLastGrant {
+                log.info("Signature drift detected — auto-resetting TCC entries")
+                permissions.runAutoFixup()
+            }
+            // Defer the window open by one tick. Showing a window from
+            // inside applicationDidFinishLaunching sometimes races with
+            // SwiftUI's own scene setup and the window doesn't actually
+            // surface — by the time the run loop spins once, the app is
+            // fully ready and `openSettings` reliably brings it up.
+            DispatchQueue.main.async { [weak self] in
+                self?.menuBar.openSettings()
+            }
         }
     }
 
@@ -96,4 +111,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         fatalError("No usable Moonshine model bundled with Whisp.app")
     }
+}
+
+extension AppDelegate {
+    /// Identifier MenuBarController stamps on its Settings NSWindow.
+    static let settingsWindowID: String = "WhispSettings"
 }

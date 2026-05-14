@@ -6,24 +6,49 @@ struct SettingsView: View {
     @ObservedObject var permissions: PermissionsManager
     let onCheckPermissions: () -> Void
 
-    /// Polls the system permission state every two seconds while the
-    /// Settings window is visible. macOS gives us no notification when a
-    /// user toggles Whisp in System Settings, so polling is the only way
-    /// to react to an external grant in near-real-time.
+    /// Auto-select the Permissions tab when something is missing — the
+    /// most common reason to open Settings is to grant a permission, so
+    /// landing on General first is annoying.
+    @State private var selectedTab: Tab
+
+    enum Tab: Hashable { case general, permissions, about }
+
+    init(
+        settings: WhispSettings,
+        permissions: PermissionsManager,
+        onCheckPermissions: @escaping () -> Void
+    ) {
+        self.settings = settings
+        self.permissions = permissions
+        self.onCheckPermissions = onCheckPermissions
+        // Default landing tab based on grant status at construction.
+        // Re-evaluated only when the view is rebuilt by SwiftUI.
+        _selectedTab = State(initialValue: permissions.allGranted ? .general : .permissions)
+    }
+
+    /// Re-poll permissions every 2 seconds. macOS gives us no notification
+    /// when the user toggles Whisp in System Settings; this is the only
+    /// way to update the UI live.
     private let pollTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             generalTab
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(Tab.general)
             permissionsTab
                 .tabItem { Label("Permissions", systemImage: "lock.shield") }
+                .tag(Tab.permissions)
             aboutTab
                 .tabItem { Label("About", systemImage: "info.circle") }
+                .tag(Tab.about)
         }
-        .frame(width: 520, height: 380)
+        .frame(width: 540, height: 460)
         .padding()
         .onReceive(pollTimer) { _ in onCheckPermissions() }
+        .onChange(of: selectedTab) { new in
+            if new == .permissions { onCheckPermissions() }
+        }
     }
 
     private var generalTab: some View {
@@ -60,87 +85,71 @@ struct SettingsView: View {
     }
 
     private var permissionsTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if permissions.needsRestart {
-                restartBanner
-            }
-
-            permissionRow(
-                title: "Microphone",
-                status: permissions.microphone,
-                why: "Whisp captures audio from your microphone to transcribe what you say.",
-                action: "Request"
-            ) {
-                permissions.requestMicrophone()
-            }
-
-            permissionRow(
-                title: "Accessibility",
-                status: permissions.accessibility,
-                why: "Whisp posts paste / keystroke events to type the transcript into the focused app.",
-                action: "Open Settings"
-            ) {
-                permissions.requestAccessibility()
-            }
-
-            permissionRow(
-                title: "Input Monitoring",
-                status: permissions.inputMonitoring,
-                why: "Whisp watches for the Fn + Option hotkey to start and stop listening.",
-                action: "Open Settings"
-            ) {
-                permissions.requestInputMonitoring()
-            }
-
-            Spacer()
-
-            HStack {
-                Spacer()
-                Button("Re-check") {
-                    onCheckPermissions()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                permissionRow(
+                    title: "Microphone",
+                    status: permissions.microphone,
+                    why: "Capture audio to transcribe.",
+                    action: "Request"
+                ) {
+                    permissions.requestMicrophone()
                 }
+
+                permissionRow(
+                    title: "Accessibility",
+                    status: permissions.accessibility,
+                    why: "Paste or type the transcript into the focused app.",
+                    action: "Open Settings"
+                ) {
+                    permissions.requestAccessibility()
+                }
+
+                permissionRow(
+                    title: "Input Monitoring",
+                    status: permissions.inputMonitoring,
+                    why: "Watch for the Fn + Option hotkey.",
+                    action: "Open Settings"
+                ) {
+                    permissions.requestInputMonitoring()
+                }
+
+                if !permissions.allGranted {
+                    staleEntryHint
+                }
+
+                HStack {
+                    Button("Re-check") {
+                        onCheckPermissions()
+                    }
+                    Spacer()
+                    Button("Restart Whisp") {
+                        permissions.restartWhisp()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!permissions.allGranted)
+                }
+                .padding(.top, 8)
             }
+            .padding()
         }
-        .padding()
     }
 
-    /// Shown whenever Accessibility or Input Monitoring is not observably
-    /// granted. macOS keys TCC grants by code-signing CDHash, which
-    /// changes on every ad-hoc rebuild. The toggle in System Settings
-    /// can show "on" while the underlying decision check still fails,
-    /// and a plain process restart doesn't fix it — you have to remove
-    /// the stale entry with `−` and re-add it.
-    private var restartBanner: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Color.orange)
-                .imageScale(.large)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Whisp can't see your grant yet")
-                    .font(.headline)
-                Text("macOS keys these permissions to Whisp's code signature. After a rebuild, your old grant may not match. Try in order:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("1. Click **Restart Whisp** below. Often enough.")
-                    Text("2. Still stuck? In System Settings, **remove** the Whisp row with `−`, then re-add by clicking *Open Settings* here.")
-                }
+    /// Yellow callout explaining the rebuild-stale-row trick. Only shown
+    /// when something is not yet granted, since users in the steady state
+    /// don't need to see it.
+    private var staleEntryHint: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Whisp shows up in System Settings but the toggle won't stick?", systemImage: "exclamationmark.bubble")
+                .font(.callout.weight(.medium))
+            Text("Find the existing \"Whisp\" row in the System Settings pane, select it, and click the **−** button to remove it. Then come back here and click **Open Settings** again — that adds a fresh entry tied to the current build's signature.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-            Button("Restart Whisp") {
-                permissions.restartWhisp()
-            }
-            .keyboardShortcut(.defaultAction)
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.orange.opacity(0.12))
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.yellow.opacity(0.15)))
     }
 
     private func permissionRow(
