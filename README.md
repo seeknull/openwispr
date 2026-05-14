@@ -93,30 +93,60 @@ workspace/
 └── whisp/          # this repo
 ```
 
-Then:
+### One command does the right thing
 
 ```bash
 cd whisp
-./scripts/bootstrap.sh           # builds Moonshine.xcframework once
-./scripts/download-models.sh     # ~280 MB medium-streaming-en
-swift test                       # unit + integration tests
-swift run Whisp                  # launch the menu-bar app (raw executable)
-./scripts/build-release.sh       # produce build/Whisp.app and dist/*.zip
-./scripts/run-dev.sh             # kill running Whisp, rebuild .app, relaunch
-./scripts/run-dev.sh --logs      # same, then tail Console logs
-./scripts/run-dev.sh --reset     # also clear TCC grants and re-prompt
+./scripts/run-dev.sh
 ```
 
-For day-to-day dev, `./scripts/run-dev.sh` is the one-step rebuild-and-launch
-loop. macOS TCC keys permission grants by bundle id **and** code-signing
-identity; ad-hoc signatures change per build, so rebuilds may invalidate
-your Accessibility / Input Monitoring grants. Toggle Whisp off/on in System
-Settings → Privacy & Security to fix (~20 seconds, same workflow VoiceInk
-and OpenSuperWhisper use). See [docs/troubleshooting.md](docs/troubleshooting.md).
+`run-dev.sh` autodetects what's needed:
 
-`bootstrap.sh` invokes Moonshine's `scripts/build-swift.sh` which produces
-`moonshine/swift/Moonshine.xcframework` (iOS + Sim + macOS). After that
+| If it sees… | It runs… |
+| --- | --- |
+| `../moonshine/swift/Moonshine.xcframework` missing | `scripts/bootstrap.sh` (builds the framework, ~3 min on Apple Silicon) |
+| `Sources/Whisp/Resources/models/medium-streaming-en/` missing | Asks before downloading (`scripts/download-models.sh`, ~280 MB) |
+| `Whisp` already running | Kills it before relaunch |
+| Code signature changed from last build | Prints the re-grant nudge (toggle Whisp in System Settings → Privacy & Security) |
+
+So **first run** does a full bootstrap + optional model download + build + launch. **Every run after that** just rebuilds incrementally and relaunches.
+
+### Flags
+
+```bash
+./scripts/run-dev.sh             # default: bootstrap-if-needed, build, launch
+./scripts/run-dev.sh --logs      # also tail Console logs
+./scripts/run-dev.sh --no-build  # skip the build, just relaunch
+./scripts/run-dev.sh --no-models # don't prompt to download models
+./scripts/run-dev.sh --reset     # tccutil reset (re-prompt all permissions)
+./scripts/run-dev.sh --clean     # nuke .build/ and build/, full rebuild
+```
+
+### Lower-level commands
+
+If you want to run pieces manually instead of via `run-dev.sh`:
+
+```bash
+./scripts/bootstrap.sh           # build Moonshine.xcframework
+./scripts/download-models.sh     # fetch medium-streaming-en
+swift test                       # unit + integration tests
+swift run Whisp                  # launch raw executable (no .app bundle)
+./scripts/build-release.sh       # produce build/Whisp.app and dist/*.zip
+```
+
+`bootstrap.sh` invokes Moonshine's `scripts/build-swift.sh`, which produces
+`moonshine/swift/Moonshine.xcframework` (iOS + Sim + macOS). After that,
 `swift build` and `swift test` resolve normally.
+
+### About TCC permissions and rebuilds
+
+macOS TCC keys permission grants by bundle id **and** code-signing identity.
+Whisp's dev builds use ad-hoc signing, so the signature hash changes per build
+and macOS may invalidate your Accessibility / Input Monitoring grants. The
+`run-dev.sh` output flags this when it detects a hash change. Fix: toggle
+Whisp off/on in System Settings → Privacy & Security (~20 seconds, same
+workflow VoiceInk and OpenSuperWhisper use). See
+[docs/troubleshooting.md](docs/troubleshooting.md).
 
 See [docs/building.md](docs/building.md) for prerequisites
 (Xcode 15+, CMake, etc.) and the dev workflow.
