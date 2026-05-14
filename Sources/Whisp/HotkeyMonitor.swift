@@ -27,6 +27,14 @@ final class HotkeyMonitor {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    /// Dedicated thread running the event tap's run loop. macOS kills any
+    /// tap whose callback misses its deadline; if we run on the main run
+    /// loop, SwiftUI rendering can starve us and the tap gets disabled
+    /// every few seconds with `kCGEventTapDisabledByTimeout`. Off the
+    /// main thread, the callback fires deterministically and the tap
+    /// stays alive.
+    private var tapThread: Thread?
+    private var tapRunLoop: CFRunLoop?
     private var stateMachine = HotkeyStateMachine()
     private var config: HotkeyConfig
     private let onEffect: ToggleHandler
@@ -68,11 +76,30 @@ final class HotkeyMonitor {
         }
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-
         self.eventTap = tap
         self.runLoopSource = source
+
+        // Spin the tap's run loop on a background thread. Apple's docs are
+        // explicit that CGEventTap callbacks must return within ~1s or
+        // macOS disables the tap (kCGEventTapDisabledByTimeout). On the
+        // main run loop, SwiftUI rendering, NSWindow resizing, and other
+        // work can starve us past that deadline. A dedicated thread
+        // sidesteps it.
+        let thread = Thread { [weak self] in
+            guard let self else { return }
+            self.tapRunLoop = CFRunLoopGetCurrent()
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+            CGEvent.tapEnable(tap: tap, enable: true)
+            // Pin the thread alive by running its run loop forever; it
+            // exits when stop() removes the source and we signal the loop.
+            while !Thread.current.isCancelled {
+                CFRunLoopRunInMode(.defaultMode, 1.0, false)
+            }
+        }
+        thread.name = "ai.whisp.HotkeyMonitor.tap"
+        thread.qualityOfService = .userInteractive
+        thread.start()
+        self.tapThread = thread
         return true
     }
 
@@ -82,9 +109,15 @@ final class HotkeyMonitor {
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        if let source = runLoopSource, let tapRunLoop {
+            CFRunLoopRemoveSource(tapRunLoop, source, .commonModes)
         }
+        tapThread?.cancel()
+        if let tapRunLoop {
+            CFRunLoopStop(tapRunLoop)
+        }
+        tapThread = nil
+        tapRunLoop = nil
         eventTap = nil
         runLoopSource = nil
     }
@@ -106,14 +139,30 @@ final class HotkeyMonitor {
         stateMachine.setListening(isListening)
     }
 
+    /// Number of times the tap has been disabled since the last successful
+    /// flagsChanged event. macOS shouldn't disable a healthy listen-only
+    /// tap repeatedly — when this climbs without any real events coming
+    /// through, Input Monitoring permission is almost certainly not
+    /// granted for the current binary's CDHash (i.e. a stale TCC entry).
+    private var consecutiveTapDisables: Int = 0
+
     private func handle(type: CGEventType, event: CGEvent) {
         // If the tap was disabled (e.g., system rejected an unusual amount of
         // work in the callback), re-enable it.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            log.warning("Event tap disabled (\(type.rawValue, privacy: .public)) — re-enabling")
+            consecutiveTapDisables += 1
+            log.warning("Event tap disabled (\(type.rawValue, privacy: .public), count=\(self.consecutiveTapDisables, privacy: .public))")
             if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // After several disables with no real events between them,
+            // the OS is silently refusing to deliver events — that's TCC
+            // refusing the tap. Surface it.
+            if consecutiveTapDisables == 3 {
+                log.error("Input Monitoring appears denied for this build's signature — hotkey won't fire until re-granted")
+            }
             return
         }
+        // Real event arrived; reset the streak.
+        consecutiveTapDisables = 0
         guard type == .flagsChanged else { return }
 
         let flags = event.flags
