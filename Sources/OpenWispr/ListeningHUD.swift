@@ -147,7 +147,11 @@ private final class HUDContentView: NSView {
         )
         dotLayer.path = CGPath(ellipseIn: dotRect, transform: nil)
         dotLayer.fillColor = NSColor.systemRed.cgColor
-        layer?.addSublayer(dotLayer)
+        // Add to the visualEffect's layer rather than self.layer —
+        // visualEffect renders opaquely on top of the host view's
+        // backing layer, so any sublayer of self.layer would be
+        // hidden behind it.
+        visualEffect.layer?.addSublayer(dotLayer)
     }
 
     private func setupBars() {
@@ -160,7 +164,9 @@ private final class HUDContentView: NSView {
             layer.frame = NSRect(x: x, y: y, width: Self.barWidth, height: height)
             layer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.85).cgColor
             layer.cornerRadius = Self.barWidth / 2
-            self.layer?.addSublayer(layer)
+            // Same reason as the dot: add to the visualEffect layer so
+            // we render *above* the blur, not underneath it.
+            visualEffect.layer?.addSublayer(layer)
             barLayers.append(layer)
         }
     }
