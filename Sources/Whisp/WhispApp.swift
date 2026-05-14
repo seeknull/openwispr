@@ -56,11 +56,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log.warning("Could not start event tap — Input Monitoring permission may be missing")
         }
 
-        // First-launch onboarding: pop the settings window if any
-        // permission is missing so the user can grant them.
+        // First-launch onboarding: if any AX/IM permission is missing,
+        // open the FixupSheet. It's the right surface whether this is a
+        // genuine first run or a rebuild that broke previous grants —
+        // both cases need the same "open System Settings, toggle on" flow.
+        //
+        // We only auto-run tccutil reset when we know the signature drifted
+        // (so genuine first-launch users don't see a reset they didn't ask
+        // for). When triggered manually via the menu bar "Reset Permissions…"
+        // item, we always reset.
         permissions.refresh()
         if !permissions.allGranted {
-            menuBar.openSettings()
+            let autoReset = permissions.signatureChangedSinceLastGrant
+            log.info("Permissions incomplete on launch; opening fixup sheet (autoReset: \(autoReset, privacy: .public))")
+            menuBar.openFixupSheet(autoReset: autoReset)
         }
     }
 

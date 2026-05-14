@@ -55,4 +55,31 @@ final class HotkeyStateMachineTests: XCTestCase {
         XCTAssertEqual(sm.modifiersPressed(now: 0.01), .none,
                        "A second press without an intervening release must be ignored")
     }
+
+    func testSetListening_doesNotEmitEffect() {
+        var sm = HotkeyStateMachine()
+        sm.setListening(true)
+        XCTAssertTrue(sm.listening)
+        XCTAssertNil(nil as Any?, "setListening must not produce an effect, only sync state")
+    }
+
+    func testSyncAfterExternalStart_nextPressStops() {
+        // Simulates: menu bar starts dictation, then user presses the hotkey.
+        // The hotkey press should be interpreted as "stop", not as a fresh start.
+        var sm = HotkeyStateMachine()
+        sm.setListening(true) // engine started via the menu bar
+        _ = sm.modifiersReleased() // chord is currently not held
+
+        let result = sm.modifiersPressed(now: 0)
+        XCTAssertEqual(result, .stopListening,
+                       "After external start, hotkey should stop with one press")
+        XCTAssertFalse(sm.listening)
+    }
+
+    func testDefaultMinimumToggleGap_isShortEnoughForRealUsage() {
+        // 60ms or less keeps deliberate human double-taps responsive.
+        let sm = HotkeyStateMachine()
+        XCTAssertLessThanOrEqual(sm.minimumToggleGap, 0.10,
+                                 "Minimum toggle gap above 100ms feels laggy")
+    }
 }

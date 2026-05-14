@@ -117,31 +117,28 @@ if [ ! -d "$APP" ]; then
     exit 1
 fi
 
-# ---- 7. Launch via `open` so LaunchServices registers the bundle ----
-echo "==> Launching $APP"
-open "$APP"
-
 NEW_HASH="$(codesign -dvvv "$APP" 2>&1 | awk -F'=' '/^CDHash=/{print $2; exit}')"
 
-# ---- 8. Re-grant nudge ----
-# We don't have an API to query TCC for "was this signature trusted?", so
-# heuristic: if the CDHash changed AND this isn't the first launch, the
-# permissions you previously granted are likely stale.
-if [ -n "$PREV_HASH" ] && [ "$PREV_HASH" != "$NEW_HASH" ]; then
+# ---- 7. Auto-reset TCC when signature drifted ----
+# Done BEFORE launch so Whisp sees the cleared state on startup and
+# auto-opens its FixupSheet onboarding flow.
+if [ -n "$PREV_HASH" ] && [ "$PREV_HASH" != "$NEW_HASH" ] && [ "$DO_RESET" = 0 ]; then
     cat <<EOF
 
-==> Note: Whisp's code signature changed from the previous build:
+==> Whisp's code signature changed since the last build:
        was: $PREV_HASH
        now: $NEW_HASH
-
-    macOS may treat this as a "new app" and ignore your previous Accessibility
-    / Input Monitoring grants. If the hotkey or paste stops working:
-      • Open System Settings → Privacy & Security → Accessibility
-        → toggle Whisp off and back on (do the same for Input Monitoring).
-      • Or run: ./scripts/run-dev.sh --reset   to start fresh.
+    Your previous TCC grants won't match this binary, so they're being
+    auto-reset. Whisp's onboarding sheet will walk you through the rest.
 
 EOF
+    tccutil reset Accessibility ai.whisp.app 2>/dev/null || true
+    tccutil reset ListenEvent   ai.whisp.app 2>/dev/null || true
 fi
+
+# ---- 8. Launch via `open` so LaunchServices registers the bundle ----
+echo "==> Launching $APP"
+open "$APP"
 
 # ---- 9. Tail Whisp logs if requested ----
 if [ "$DO_LOGS" = 1 ]; then

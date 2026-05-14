@@ -98,6 +98,14 @@ final class HotkeyMonitor {
         }
     }
 
+    /// Sync the state machine's `listening` flag without firing an effect.
+    /// Call this when an external trigger (menu bar Start item, engine
+    /// error) changes the real listening state so the next hotkey press
+    /// behaves as a clean toggle.
+    func syncListeningState(_ isListening: Bool) {
+        stateMachine.setListening(isListening)
+    }
+
     private func handle(type: CGEventType, event: CGEvent) {
         // If the tap was disabled (e.g., system rejected an unusual amount of
         // work in the callback), re-enable it.

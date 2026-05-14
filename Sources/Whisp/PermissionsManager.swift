@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import ApplicationServices
 import Foundation
+import OSLog
 
 /// Coordinates the three macOS permissions Whisp depends on. Each helper
 /// either returns the current grant state without prompting, or actively
@@ -11,19 +12,25 @@ import Foundation
 ///   2. Accessibility — needed to post synthetic input events.
 ///   3. Input Monitoring — needed for the CGEventTap that watches the hotkey.
 ///
-/// ## The "running process can't see the new grant" trap
+/// ## The TCC mismatch trap
 ///
-/// Both `AXIsProcessTrusted()` and `CGEvent.tapCreate(listenOnly:)` cache
-/// their permission decision inside the current process. macOS delivers the
-/// **new** grant only to a freshly-launched process. So if you grant
-/// Accessibility while Whisp is running, this class's `accessibility`
-/// property keeps returning `.notDetermined` regardless of how many times
-/// we re-poll — the API itself lies.
+/// Two distinct problems make permissions feel broken:
 ///
-/// We can't fix that API, so the UX strategy is: any time Accessibility or
-/// Input Monitoring is not `.granted`, surface a "Restart Whisp" button.
-/// The honest message is "either you haven't granted, or you did and we
-/// can't see it — relaunching fixes both."
+/// 1. **Per-process caching.** `AXIsProcessTrusted()` and
+///    `CGEvent.tapCreate(listenOnly:)` cache their decision inside the
+///    current process. A grant the user makes while Whisp is running
+///    isn't visible until Whisp restarts.
+///
+/// 2. **Stale TCC entries after rebuild.** TCC keys grants by the bundle
+///    id + code-signing requirement (CDHash). Ad-hoc rebuilds produce a
+///    different CDHash, so the System Settings row still shows "Whisp"
+///    but the underlying decision-check doesn't match. Toggling won't
+///    fix it; the row has to be removed with the `−` button and re-added.
+///
+/// `PermissionsManager` detects (2) by persisting the CDHash present at
+/// the moment of the last successful grant and comparing on every launch.
+/// When they mismatch, `signatureChangedSinceLastGrant == true` and the
+/// UI shows a stronger "Reset grants" affordance.
 enum PermissionStatus: Equatable {
     case granted
     case denied
@@ -38,17 +45,35 @@ enum PermissionKind: String, CaseIterable {
 
 @MainActor
 final class PermissionsManager: ObservableObject {
+    private let log = Logger(subsystem: "ai.whisp.app", category: "PermissionsManager")
+
     @Published private(set) var microphone: PermissionStatus = .notDetermined
     @Published private(set) var accessibility: PermissionStatus = .notDetermined
     @Published private(set) var inputMonitoring: PermissionStatus = .notDetermined
 
-    init() { refresh() }
+    /// Set true on launch if the binary's CDHash differs from the one
+    /// stored last time Whisp observed all permissions as granted. Drives
+    /// the "your previous grants probably won't match this build" UX.
+    @Published private(set) var signatureChangedSinceLastGrant: Bool = false
+
+    init() {
+        detectSignatureMismatch()
+        refresh()
+    }
 
     /// Re-query every permission. Cheap; safe to call from UI on demand.
+    /// Also persists the current signature any time we observe a fully
+    /// granted state, so the next launch can detect drift.
     func refresh() {
         microphone = microphoneStatus()
         accessibility = accessibilityStatus()
         inputMonitoring = inputMonitoringStatus()
+
+        if allGranted, let cd = currentCDHash {
+            // We're in a good state — remember this signature for next time.
+            UserDefaults.standard.set(cd, forKey: lastGrantedCDHashKey)
+            signatureChangedSinceLastGrant = false
+        }
     }
 
     var allGranted: Bool {
@@ -57,10 +82,32 @@ final class PermissionsManager: ObservableObject {
 
     /// True whenever a system-level permission may have been granted but the
     /// running process can't observe it (because TCC caches per-process).
-    /// We treat *any* non-granted state for Accessibility or Input Monitoring
-    /// as "user might already have granted, restart to find out."
     var needsRestart: Bool {
         accessibility != .granted || inputMonitoring != .granted
+    }
+
+    /// Reset Accessibility + Input Monitoring TCC entries for this bundle
+    /// via `tccutil`, open System Settings to the Accessibility pane, and
+    /// post a notification. Returns true if at least one reset succeeded.
+    ///
+    /// The user still has to manually remove the stale row and toggle on
+    /// — macOS does not allow scripts to perform those actions. But we
+    /// can do everything *up to* that point.
+    @discardableResult
+    func runAutoFixup() -> Bool {
+        log.info("Running auto-fixup: tccutil reset Accessibility / ListenEvent for \(Bundle.main.bundleIdentifier ?? "?", privacy: .public)")
+        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.app"
+        var anySuccess = false
+        for service in ["Accessibility", "ListenEvent"] {
+            if runTccutil(service: service, bundle: bundleID) {
+                anySuccess = true
+            }
+        }
+        // Drop the stored CDHash so we don't keep showing the
+        // "signature changed" banner after the user has gone through fixup.
+        UserDefaults.standard.removeObject(forKey: lastGrantedCDHashKey)
+        signatureChangedSinceLastGrant = false
+        return anySuccess
     }
 
     /// Spawn `open -n` to launch a fresh copy of Whisp and exit the current
@@ -148,6 +195,73 @@ final class PermissionsManager: ObservableObject {
         // No direct API triggers this prompt; opening the pane and asking
         // the user to enable Whisp is the canonical flow.
         openSystemSettings(pane: "Privacy_ListenEvent")
+    }
+
+    // MARK: - Open System Settings panes
+
+    func openAccessibilityPane() {
+        openSystemSettings(pane: "Privacy_Accessibility")
+    }
+
+    func openInputMonitoringPane() {
+        openSystemSettings(pane: "Privacy_ListenEvent")
+    }
+
+    // MARK: - Signature tracking
+
+    private let lastGrantedCDHashKey = "lastGrantedCDHash"
+
+    /// Reads the CDHash of the currently-running bundle by shelling out
+    /// to `codesign -d -v`. Returns nil if the binary isn't signed at all.
+    private var currentCDHash: String? {
+        let pipe = Pipe()
+        let task = Process()
+        task.launchPath = "/usr/bin/codesign"
+        task.arguments = ["-dvvv", Bundle.main.bundleURL.path]
+        task.standardOutput = pipe
+        task.standardError = pipe
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return nil
+        }
+        guard let data = try? pipe.fileHandleForReading.readToEnd(),
+              let output = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        for line in output.split(separator: "\n") {
+            if line.hasPrefix("CDHash=") {
+                return String(line.dropFirst("CDHash=".count))
+            }
+        }
+        return nil
+    }
+
+    private func detectSignatureMismatch() {
+        guard let cd = currentCDHash else { return }
+        let stored = UserDefaults.standard.string(forKey: lastGrantedCDHashKey)
+        if let stored, stored != cd {
+            log.info("CDHash changed since last grant: was \(stored, privacy: .public), now \(cd, privacy: .public). Prior TCC entry may be stale.")
+            signatureChangedSinceLastGrant = true
+        }
+    }
+
+    // MARK: - Subprocess plumbing
+
+    /// `/usr/bin/tccutil reset <service> <bundle-id>`. Returns true on
+    /// exit code 0.
+    private func runTccutil(service: String, bundle: String) -> Bool {
+        let task = Process()
+        task.launchPath = "/usr/bin/tccutil"
+        task.arguments = ["reset", service, bundle]
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return false
+        }
+        return task.terminationStatus == 0
     }
 
     // MARK: - Helpers

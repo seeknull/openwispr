@@ -14,6 +14,7 @@ final class MenuBarController: NSObject {
     private let settings: WhispSettings
     private let hud = ListeningHUD()
     private var settingsWindow: NSWindow?
+    private var fixupWindow: NSWindow?
     private var currentState: DictationState = .idle
 
     init(
@@ -65,6 +66,14 @@ final class MenuBarController: NSObject {
         perms.target = self
         menu.addItem(perms)
 
+        let resetItem = NSMenuItem(
+            title: "Reset Permissions…",
+            action: #selector(resetPermissions),
+            keyEquivalent: ""
+        )
+        resetItem.target = self
+        menu.addItem(resetItem)
+
         menu.addItem(.separator())
 
         let about = NSMenuItem(title: "About Whisp", action: #selector(openAbout), keyEquivalent: "")
@@ -85,14 +94,22 @@ final class MenuBarController: NSObject {
             statusItem.button?.image = idleIcon
             statusItem.button?.image?.isTemplate = true
             hud.hide()
+            // Keep the hotkey state machine's bookkeeping in sync with the
+            // engine. Without this, the next hotkey press could toggle from
+            // a stale "true" → "false" and silently no-op against an
+            // already-stopped engine, requiring a second press to actually
+            // start.
+            hotkey.syncListeningState(false)
         case .listening:
             statusItem.button?.image = listeningIcon
             statusItem.button?.image?.isTemplate = false
             if settings.showHUD { hud.show() }
+            hotkey.syncListeningState(true)
         case .error(let msg):
             statusItem.button?.image = idleIcon
             statusItem.button?.toolTip = "Whisp — \(msg)"
             hud.hide()
+            hotkey.syncListeningState(false)
         }
         // Refresh menu so the toggle item title matches.
         statusItem.menu = buildMenu()
@@ -167,9 +184,43 @@ final class MenuBarController: NSObject {
         openSettings()
     }
 
+    /// Show the rebuild-rescue sheet. Used both automatically on launch
+    /// (when PermissionsManager flags a signature mismatch) and from the
+    /// menu bar's "Reset Permissions…" item.
+    func openFixupSheet(autoReset: Bool) {
+        permissions.refresh()
+        if autoReset {
+            // Run tccutil first so the user opens System Settings into a
+            // cleaned-up state. Stale rows still show, but the underlying
+            // decision is cleared, which avoids confusion when they re-toggle.
+            permissions.runAutoFixup()
+        }
+        if fixupWindow == nil {
+            let view = FixupSheetView(
+                permissions: permissions,
+                onClose: { [weak self] in self?.fixupWindow?.close() }
+            )
+            let host = NSHostingController(rootView: view)
+            let window = NSWindow(contentViewController: host)
+            window.title = "Whisp — Re-grant permissions"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.identifier = NSUserInterfaceItemIdentifier("WhispFixupWindow")
+            window.setAccessibilityIdentifier("WhispFixupWindow")
+            fixupWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        fixupWindow?.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func openAbout() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
+    @objc private func resetPermissions() {
+        openFixupSheet(autoReset: true)
     }
 
     @objc private func quit() {
