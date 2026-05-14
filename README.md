@@ -100,9 +100,16 @@ cd whisp
 ./scripts/bootstrap.sh           # builds Moonshine.xcframework once
 ./scripts/download-models.sh     # ~280 MB medium-streaming-en
 swift test                       # unit + integration tests
-swift run Whisp                  # launch the menu-bar app
+swift run Whisp                  # launch the menu-bar app (raw executable)
 ./scripts/build-release.sh       # produce build/Whisp.app and dist/*.zip
+./scripts/run-dev.sh             # kill running Whisp, rebuild .app, relaunch
+./scripts/run-dev.sh --logs      # same, then tail Console logs
+./scripts/run-dev.sh --reset     # also clear TCC grants and re-prompt
 ```
+
+For day-to-day dev, `./scripts/run-dev.sh` is the one-step rebuild-and-launch
+loop. TCC permissions are keyed by bundle id, so grants survive rebuilds —
+pass `--reset` if the hotkey or paste stops working after many rebuilds.
 
 `bootstrap.sh` invokes Moonshine's `scripts/build-swift.sh` which produces
 `moonshine/swift/Moonshine.xcframework` (iOS + Sim + macOS). After that
