@@ -1,0 +1,136 @@
+name: Release
+
+# Tag-driven release builds. Push a tag like `v0.1.0` and this
+# workflow builds OpenWispr.app, zips it as OpenWispr.zip, and
+# attaches it to a GitHub Release with that tag.
+#
+# Trigger:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# To dry-run without publishing, use workflow_dispatch from the
+# Actions tab and set publish=false.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (must already exist on this commit)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: macos-15
+    steps:
+      - name: Checkout moonshine (for SwiftPM resolution)
+        uses: actions/checkout@v4
+        with:
+          repository: moonshine-ai/moonshine
+          path: moonshine
+
+      - name: Checkout openwispr
+        uses: actions/checkout@v4
+        with:
+          path: openwispr
+          fetch-depth: 0  # full history so the tag is available
+
+      - name: Determine version
+        id: version
+        working-directory: openwispr
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building release: tag=$TAG version=$VERSION"
+
+      - name: Print toolchain
+        working-directory: openwispr
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # Building OpenWispr.app needs Moonshine.xcframework. Cache it so
+      # tag-pushes are fast after the first cold build (~3 min).
+      - name: Cache Moonshine.xcframework
+        id: cache-xcf
+        uses: actions/cache@v4
+        with:
+          path: moonshine/swift/Moonshine.xcframework
+          key: moonshine-xcframework-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('moonshine/core/**', 'moonshine/scripts/build-swift.sh') }}
+
+      - name: Build Moonshine.xcframework (cache miss only)
+        if: steps.cache-xcf.outputs.cache-hit != 'true'
+        working-directory: moonshine
+        run: bash scripts/build-swift.sh
+
+      # Models are big (~280 MB for medium-streaming-en). We bundle them
+      # into the .app so end users don't need a download step on launch.
+      - name: Download Moonshine model
+        working-directory: openwispr
+        run: ./scripts/download-models.sh
+
+      - name: Build OpenWispr.app
+        working-directory: openwispr
+        run: ./scripts/build-release.sh
+
+      - name: Rename zip to versionless name
+        working-directory: openwispr/dist
+        run: |
+          # build-release.sh produces OpenWispr-<version>.zip; we publish
+          # as OpenWispr.zip so the "latest release" download URL is
+          # stable: github.com/seeknull/openwispr/releases/latest/download/OpenWispr.zip
+          cp "OpenWispr-${{ steps.version.outputs.version }}.zip" OpenWispr.zip
+          ls -lh
+
+      - name: Generate SHA256
+        working-directory: openwispr/dist
+        run: |
+          shasum -a 256 OpenWispr.zip > OpenWispr.zip.sha256
+          cat OpenWispr.zip.sha256
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body: |
+            ## OpenWispr ${{ steps.version.outputs.tag }}
+
+            Download `OpenWispr.zip` below, unzip, drag `OpenWispr.app`
+            to `/Applications`, and **right-click → Open** the first
+            time (the build is unsigned; this is a one-time Gatekeeper
+            acceptance).
+
+            See [docs/install.md](https://github.com/seeknull/openwispr/blob/main/docs/install.md)
+            for the full first-launch walkthrough.
+
+            ### Privacy
+
+            OpenWispr is fully on-device — no network calls in the
+            dictation path. Verify yourself:
+
+            ```
+            grep -r "URLSession\|http://\|https://" Sources/
+            ```
+
+            ### Checksums
+
+            See `OpenWispr.zip.sha256` below.
+          draft: false
+          prerelease: false
+          files: |
+            openwispr/dist/OpenWispr.zip
+            openwispr/dist/OpenWispr.zip.sha256
