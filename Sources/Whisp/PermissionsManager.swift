@@ -69,6 +69,7 @@ final class PermissionsManager: ObservableObject {
         microphone = microphoneStatus()
         accessibility = accessibilityStatus()
         inputMonitoring = inputMonitoringStatus()
+        log.info("Permissions refresh: mic=\(String(describing: self.microphone), privacy: .public) ax=\(String(describing: self.accessibility), privacy: .public) im=\(String(describing: self.inputMonitoring), privacy: .public)")
 
         if allGranted, let cd = currentCDHash {
             // We're in a good state — remember this signature for next time.
@@ -125,9 +126,10 @@ final class PermissionsManager: ObservableObject {
     func hardReset() {
         log.warning("Hard reset: clearing all TCC grants for ai.whisp.app")
         let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.app"
-        for service in ["Microphone", "Accessibility", "ListenEvent", "PostEvent"] {
-            _ = runTccutil(service: service, bundle: bundleID)
-        }
+        // `tccutil reset All <bundle>` clears every per-service entry plus
+        // the underlying per-code-requirement metadata that `reset <service>`
+        // sometimes leaves behind. This is the most thorough form.
+        _ = runTccutil(service: "All", bundle: bundleID)
         UserDefaults.standard.removeObject(forKey: lastGrantedCDHashKey)
         UserDefaults.standard.synchronize()
         // Open the parent Privacy & Security pane so the user can sweep
@@ -224,6 +226,13 @@ final class PermissionsManager: ObservableObject {
     /// are no-ops. We follow it by opening the pane so the user can
     /// toggle from there if they dismissed the prompt.
     func requestInputMonitoring() {
+        // Always re-fire IOHIDRequestAccess before opening the pane.
+        // When TCC has previously recorded a "denied" decision for this
+        // signature, the row may be missing from System Settings entirely
+        // (Apple hides it after explicit denial). The request call is what
+        // re-adds the row in some macOS versions; in others the user has
+        // to use Hard Reset to clear the denial first. Either way the
+        // call is cheap.
         ensureInputMonitoringIsRegistered()
         openSystemSettings(pane: "Privacy_ListenEvent")
     }
