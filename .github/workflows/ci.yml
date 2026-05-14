@@ -11,12 +11,33 @@ jobs:
     name: Unit tests (OpenWisprCore)
     # macos-15 ships Xcode 16 with Swift 6.1 (matches our
     # swift-tools-version in Package.swift). macos-14 has Swift 5.10
-    # and fails immediately.
+    # which is too old.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      # Package.swift declares a local-path dependency on
+      # ../moonshine/swift. SwiftPM resolves the entire manifest before
+      # it'll run any test, even one filtered down to OpenWisprCore
+      # (which doesn't actually import Moonshine). So we need to put a
+      # moonshine repo next to ours.
+      #
+      # We do NOT build Moonshine.xcframework here — that's a 3-min
+      # cmake build. SwiftPM only needs the Package.swift file to exist
+      # for resolution to succeed. The xcframework would only be needed
+      # if we actually compiled the MoonshineVoice target, which the
+      # OpenWisprCore filter avoids.
+      - name: Checkout moonshine (for SwiftPM resolution only)
+        uses: actions/checkout@v4
+        with:
+          repository: moonshine-ai/moonshine
+          path: moonshine
+
+      - name: Checkout openwispr
+        uses: actions/checkout@v4
+        with:
+          path: openwispr
 
       - name: Print toolchain
+        working-directory: openwispr
         run: |
           swift --version
           xcodebuild -version
@@ -27,4 +48,5 @@ jobs:
       # Moonshine build) are run locally only — they require ~3 min of
       # cmake setup that's wasteful for every PR.
       - name: swift test --filter OpenWisprCoreTests
+        working-directory: openwispr
         run: swift test --filter OpenWisprCoreTests
