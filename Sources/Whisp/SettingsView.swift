@@ -105,23 +105,30 @@ struct SettingsView: View {
     }
 
     /// Shown whenever Accessibility or Input Monitoring is not observably
-    /// granted. macOS caches both decisions per-process, so a grant the
-    /// user has *actually* made may still look like `.notDetermined` to
-    /// this running process — a relaunch is the only way to find out.
-    /// We always show this when either is missing, regardless of who
-    /// did what.
+    /// granted. macOS keys TCC grants by code-signing CDHash, which
+    /// changes on every ad-hoc rebuild. The toggle in System Settings
+    /// can show "on" while the underlying decision check still fails,
+    /// and a plain process restart doesn't fix it — you have to remove
+    /// the stale entry with `−` and re-add it.
     private var restartBanner: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "arrow.clockwise.circle.fill")
-                .foregroundStyle(.tint)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.orange)
                 .imageScale(.large)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Already granted in System Settings? Restart Whisp.")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Whisp can't see your grant yet")
                     .font(.headline)
-                Text("macOS caches Accessibility and Input Monitoring decisions inside the running process. If you've toggled Whisp on but it still says \"Needed\" here, relaunching is what lets Whisp see the new grant.")
+                Text("macOS keys these permissions to Whisp's code signature. After a rebuild, your old grant may not match. Try in order:")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("1. Click **Restart Whisp** below. Often enough.")
+                    Text("2. Still stuck? In System Settings, **remove** the Whisp row with `−`, then re-add by clicking *Open Settings* here.")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             Button("Restart Whisp") {
@@ -132,7 +139,7 @@ struct SettingsView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.accentColor.opacity(0.12))
+                .fill(Color.orange.opacity(0.12))
         )
     }
 

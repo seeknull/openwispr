@@ -86,6 +86,17 @@ if [ "$DO_RESET" = 1 ]; then
     tccutil reset Microphone     ai.whisp.app 2>/dev/null || true
     tccutil reset Accessibility  ai.whisp.app 2>/dev/null || true
     tccutil reset ListenEvent    ai.whisp.app 2>/dev/null || true
+    cat <<'EOF'
+
+   IMPORTANT: tccutil reset clears the grant decision but leaves the
+   "Whisp" row visible in System Settings (bound to the old CDHash).
+   Open System Settings → Privacy & Security → Accessibility and
+   Input Monitoring; if Whisp appears in either list, **select it and
+   press the −** button to fully remove the stale row. Then come back
+   and grant fresh — the new entry will be bound to the current
+   signature.
+
+EOF
 fi
 
 # ---- 6. Build ----
