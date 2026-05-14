@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import ApplicationServices
 import Foundation
+import IOKit.hid
 import OSLog
 
 /// Coordinates the three macOS permissions Whisp depends on. Each helper
@@ -110,6 +111,36 @@ final class PermissionsManager: ObservableObject {
         return anySuccess
     }
 
+    /// Nuclear reset for when TCC has gotten into a confused state with
+    /// stale rows in System Settings. We can:
+    ///   1. `tccutil reset` every Whisp-relevant service.
+    ///   2. Drop our own stored CDHash bookkeeping.
+    ///   3. Quit Whisp so the next launch comes up with zero state.
+    ///
+    /// We CANNOT click the `−` button in System Settings for the user —
+    /// macOS forbids any app from doing that. After the reset + quit,
+    /// the user manually removes any stale rows that remain visible.
+    /// Opens System Settings → Privacy & Security so they're a click
+    /// away from doing so.
+    func hardReset() {
+        log.warning("Hard reset: clearing all TCC grants for ai.whisp.app")
+        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.app"
+        for service in ["Microphone", "Accessibility", "ListenEvent", "PostEvent"] {
+            _ = runTccutil(service: service, bundle: bundleID)
+        }
+        UserDefaults.standard.removeObject(forKey: lastGrantedCDHashKey)
+        UserDefaults.standard.synchronize()
+        // Open the parent Privacy & Security pane so the user can sweep
+        // the three sub-panes (Microphone, Accessibility, Input Monitoring)
+        // and click `−` on any leftover Whisp rows.
+        openSystemSettings(pane: "Privacy")
+        // Quit after a moment so the user's last action (the open) gets
+        // a chance to fire before the process exits.
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(300)) {
+            NSApp.terminate(nil)
+        }
+    }
+
     /// Spawn `open -n` to launch a fresh copy of Whisp and exit the current
     /// process. The new instance picks up any TCC grants that landed while
     /// the old one was running.
@@ -168,33 +199,46 @@ final class PermissionsManager: ObservableObject {
 
     // MARK: - Input Monitoring (for CGEventTap)
 
-    /// Probes by creating a `listenOnly` event tap. This is the only
-    /// reliable signal for Input Monitoring in user code — Apple has no
-    /// public TCC-query API for it.
-    ///
-    /// We deliberately do NOT cache this result. The user can flip the
-    /// grant in System Settings at any moment and we want `refresh()` to
-    /// pick it up next time the Settings tab is opened.
+    /// `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` is the canonical
+    /// TCC-query for Input Monitoring. The earlier listen-only-tap probe
+    /// was wrong: `.listenOnly` taps have a different (lower) privacy
+    /// class than the full Input Monitoring grant, so the probe always
+    /// returned `.granted` even when Whisp wasn't in the Input Monitoring
+    /// list at all — leading the UI to claim everything was fine while
+    /// the actual hotkey tap was silently rejected.
     private func inputMonitoringStatus() -> PermissionStatus {
-        let mask = (1 << CGEventType.flagsChanged.rawValue)
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: CGEventMask(mask),
-            callback: { _, _, e, _ in Unmanaged.passUnretained(e) },
-            userInfo: nil
-        ) else {
-            return .notDetermined
+        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
+        case kIOHIDAccessTypeGranted: return .granted
+        case kIOHIDAccessTypeDenied:  return .denied
+        case kIOHIDAccessTypeUnknown: return .notDetermined
+        default:                       return .notDetermined
         }
-        CGEvent.tapEnable(tap: tap, enable: false)
-        return .granted
     }
 
+    /// Trigger the system prompt for Input Monitoring. This is the call
+    /// that actually adds Whisp to the **Privacy & Security → Input
+    /// Monitoring** list in System Settings. Without it, the user can't
+    /// flip a toggle for Whisp because there's no row to flip.
+    ///
+    /// macOS shows the prompt once per app per session; subsequent calls
+    /// are no-ops. We follow it by opening the pane so the user can
+    /// toggle from there if they dismissed the prompt.
     func requestInputMonitoring() {
-        // No direct API triggers this prompt; opening the pane and asking
-        // the user to enable Whisp is the canonical flow.
+        ensureInputMonitoringIsRegistered()
         openSystemSettings(pane: "Privacy_ListenEvent")
+    }
+
+    /// Trigger `IOHIDRequestAccess` once so Whisp appears in the Input
+    /// Monitoring list in System Settings. Without this call, Whisp is
+    /// invisible to the user — there's no row for them to toggle on.
+    /// Safe to call on every launch: the underlying API is a no-op if
+    /// the request has already been made for this binary.
+    func ensureInputMonitoringIsRegistered() {
+        // The return value is irrelevant for our purposes — even a
+        // "denied" response means Whisp now appears in the System Settings
+        // list, where the user can re-enable it.
+        let _: Bool = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        refresh()
     }
 
     // MARK: - Open System Settings panes

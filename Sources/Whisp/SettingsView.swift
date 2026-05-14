@@ -10,6 +10,7 @@ struct SettingsView: View {
     /// most common reason to open Settings is to grant a permission, so
     /// landing on General first is annoying.
     @State private var selectedTab: Tab
+    @State private var showHardResetConfirm: Bool = false
 
     enum Tab: Hashable { case general, permissions, about }
 
@@ -122,6 +123,10 @@ struct SettingsView: View {
                     Button("Re-check") {
                         onCheckPermissions()
                     }
+                    Button(role: .destructive, action: { showHardResetConfirm = true }) {
+                        Label("Hard Reset", systemImage: "exclamationmark.arrow.circlepath")
+                    }
+                    .help("Clear all TCC grants for Whisp and quit. Use when permissions are stuck.")
                     Spacer()
                     Button("Restart Whisp") {
                         permissions.restartWhisp()
@@ -132,6 +137,14 @@ struct SettingsView: View {
                 .padding(.top, 8)
             }
             .padding()
+            .alert("Hard reset Whisp's permissions?", isPresented: $showHardResetConfirm) {
+                Button("Cancel", role: .cancel) { }
+                Button("Reset and Quit", role: .destructive) {
+                    permissions.hardReset()
+                }
+            } message: {
+                Text("Whisp will clear all of its TCC entries (Microphone, Accessibility, Input Monitoring), open System Settings → Privacy & Security, and quit. From there you can remove any stale \"Whisp\" rows that remain visible by clicking the row and pressing the − button, then relaunch Whisp from /Applications or your dev build for a clean grant flow.")
+            }
         }
     }
 

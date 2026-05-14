@@ -61,6 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             log.warning("Could not start event tap — Input Monitoring permission may be missing")
         }
 
+        // Always call IOHIDRequestAccess so Whisp appears in the System
+        // Settings → Input Monitoring list. CGEvent.tapCreate alone does
+        // NOT add the app to that list — without this call, the user
+        // has no row to toggle.
+        permissions.ensureInputMonitoringIsRegistered()
+
         // First-launch onboarding: open the Settings window's Permissions
         // tab if anything is missing. If a signature drift was detected,
         // pre-clear stale TCC entries with tccutil so the user opens System
