@@ -54,6 +54,10 @@ struct SettingsView: View {
 
     private var permissionsTab: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if permissions.needsRestart {
+                restartBanner
+            }
+
             permissionRow(
                 title: "Microphone",
                 status: permissions.microphone,
@@ -91,6 +95,34 @@ struct SettingsView: View {
             }
         }
         .padding()
+    }
+
+    /// Shown when the user has clicked into System Settings for Accessibility
+    /// or Input Monitoring. The grant doesn't propagate to the running
+    /// process; a relaunch is the honest fix.
+    private var restartBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.clockwise.circle.fill")
+                .foregroundStyle(.tint)
+                .imageScale(.large)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Restart Whisp to apply the new permissions")
+                    .font(.headline)
+                Text("macOS only delivers Accessibility and Input Monitoring grants to a fresh launch. The running process will keep seeing the old (denied) state until restart.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Restart Whisp") {
+                permissions.restartWhisp()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.accentColor.opacity(0.12))
+        )
     }
 
     private func permissionRow(

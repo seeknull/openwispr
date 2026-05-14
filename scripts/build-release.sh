@@ -84,6 +84,38 @@ if [ ! -d "$MOONSHINE_FRAMEWORK" ]; then
     exit 1
 fi
 
+# Sign the bundle. macOS TCC (Microphone / Accessibility / Input Monitoring)
+# refuses to attribute permissions to a bundle with no signature at all,
+# so we always sign — at minimum ad-hoc.
+#
+# Two paths:
+#   * Ad-hoc (default): `codesign --sign -`. Sufficient for first-launch
+#     grants. The signature hash differs across rebuilds, so macOS may
+#     decide a rebuilt Whisp is a "new" app and invalidate the grant —
+#     re-grant once when that happens. Same trade-off OpenSuperWhisper /
+#     VoiceInk ship with.
+#   * Stable local identity: if you've run `scripts/create-dev-cert.sh`,
+#     the build picks up that cert and grants persist across rebuilds.
+#
+# `xattr -cr` strips the quarantine attribute so Gatekeeper doesn't
+# block our own dev launches.
+SIGN_IDENTITY="${WHISP_SIGN_IDENTITY:-Whisp Local Dev}"
+ENTITLEMENTS="$WHISP_DIR/Sources/Whisp/Resources/Whisp.entitlements"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
+    echo "==> Codesigning with stable identity: $SIGN_IDENTITY"
+    codesign --force --deep --options runtime \
+        --sign "$SIGN_IDENTITY" \
+        --entitlements "$ENTITLEMENTS" \
+        "$APP_DIR" >/dev/null
+else
+    echo "==> Ad-hoc codesigning (grants may invalidate on rebuild)"
+    codesign --force --deep \
+        --sign - \
+        --entitlements "$ENTITLEMENTS" \
+        "$APP_DIR" >/dev/null
+fi
+xattr -cr "$APP_DIR"
+
 echo "==> Zipping release..."
 cd "$BUILD_DIR"
 ZIP_NAME="Whisp-${VERSION}.zip"

@@ -108,8 +108,14 @@ swift run Whisp                  # launch the menu-bar app (raw executable)
 ```
 
 For day-to-day dev, `./scripts/run-dev.sh` is the one-step rebuild-and-launch
-loop. TCC permissions are keyed by bundle id, so grants survive rebuilds —
-pass `--reset` if the hotkey or paste stops working after many rebuilds.
+loop. macOS TCC keys permission grants by bundle id **and** code-signing
+identity; the default ad-hoc signature changes per build, so rebuilds may
+invalidate your Accessibility / Input Monitoring grants. Two paths forward:
+
+- **Easy:** re-grant once after the rebuild (toggle Whisp in System Settings).
+- **Permanent:** run `./scripts/create-dev-cert.sh` once. It creates a local
+  self-signed cert so all future builds share a stable signing identity and
+  grants persist. See [docs/troubleshooting.md](docs/troubleshooting.md).
 
 `bootstrap.sh` invokes Moonshine's `scripts/build-swift.sh` which produces
 `moonshine/swift/Moonshine.xcframework` (iOS + Sim + macOS). After that
