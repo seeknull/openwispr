@@ -21,58 +21,69 @@ import OSLog
 ///
 /// ## Threading
 ///
-/// The tap fires on an audio thread. We publish through a closure
-/// the caller hands us; the caller is responsible for hopping to the
-/// main thread before touching UI. Doing the dispatch here would
-/// stack frames per buffer.
-@MainActor
-final class AudioLevelMeter {
+/// **Critical**: the AVAudioEngine tap callback runs on an audio (real-
+/// time) thread, NOT the main thread. This class is therefore
+/// **not** `@MainActor`-isolated — that would crash with a
+/// `_dispatch_assert_queue_fail` the first time the audio thread tried
+/// to touch any property. We use plain non-isolated storage protected
+/// by a lock for the small mutable state that's shared between
+/// `start()`/`stop()` (called on main) and the tap callback (audio
+/// thread).
+///
+/// The `onLevel` handler is `@Sendable` and called on the audio thread;
+/// the caller is responsible for hopping to main before touching UI.
+final class AudioLevelMeter: @unchecked Sendable {
     private let log = Logger(subsystem: "dev.openwispr.app", category: "AudioLevelMeter")
 
-    /// Called on an arbitrary audio thread every time a new buffer is
-    /// processed. Caller should `DispatchQueue.main.async` before
-    /// touching UI.
     typealias LevelHandler = @Sendable (Float) -> Void
 
+    private let lock = NSLock()
     private var engine: AVAudioEngine?
-    private let onLevel: LevelHandler
+    private var smoothedLevel: Float = 0
 
-    /// Smoothing coefficient: 0.0 = no smoothing (instant response,
-    /// jittery), 1.0 = never updates. 0.6 sits comfortably between.
-    private nonisolated(unsafe) var smoothedLevel: Float = 0
+    private let onLevel: LevelHandler
+    /// Smoothing coefficient: 0.0 = no smoothing (instant, jittery),
+    /// 1.0 = never updates. 0.6 sits comfortably between.
     private let smoothing: Float = 0.6
 
     init(onLevel: @escaping LevelHandler) {
         self.onLevel = onLevel
     }
 
-    deinit {
-        // Tap removal happens on stop(); deinit ordering guarantees the
-        // engine is already gone if it ever existed.
-    }
-
-    /// Start sampling. Idempotent — safe to call again on an already-
-    /// running meter (no-op).
+    /// Start sampling. Idempotent — safe to call on an already-running
+    /// meter (no-op).
     func start() {
-        guard engine == nil else { return }
+        lock.lock()
+        guard engine == nil else { lock.unlock(); return }
+        lock.unlock()
+
         let engine = AVAudioEngine()
         let input = engine.inputNode
         let format = input.inputFormat(forBus: 0)
+
         // 1024 frames @ 48kHz ≈ 21ms — fast enough to feel live, slow
         // enough that we don't waste CPU updating 100×/sec.
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             guard let self else { return }
             let raw = AudioLevelMeter.rms(of: buffer)
-            // Exponential smoothing so the visualizer doesn't twitch
-            // on transient peaks.
-            let smoothed = self.smoothing * self.smoothedLevel + (1 - self.smoothing) * raw
+
+            // Read-modify-write under the lock so concurrent stop()
+            // can't see a half-updated value.
+            self.lock.lock()
+            let previous = self.smoothedLevel
+            let smoothed = self.smoothing * previous + (1 - self.smoothing) * raw
             self.smoothedLevel = smoothed
+            self.lock.unlock()
+
             self.onLevel(smoothed)
         }
+
         do {
             engine.prepare()
             try engine.start()
+            lock.lock()
             self.engine = engine
+            lock.unlock()
             log.info("AudioLevelMeter started")
         } catch {
             log.error("Failed to start audio engine: \(error.localizedDescription, privacy: .public)")
@@ -81,11 +92,15 @@ final class AudioLevelMeter {
 
     /// Stop sampling. Idempotent.
     func stop() {
+        lock.lock()
+        let engine = self.engine
+        self.engine = nil
+        smoothedLevel = 0
+        lock.unlock()
+
         guard let engine else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        smoothedLevel = 0
-        self.engine = nil
         log.info("AudioLevelMeter stopped")
     }
 
@@ -93,8 +108,8 @@ final class AudioLevelMeter {
     /// a 0...1 visualization range.
     ///
     /// Raw RMS for normal speech sits around 0.05-0.3; we boost via a
-    /// gentle curve so quiet voices still register visually.
-    nonisolated static func rms(of buffer: AVAudioPCMBuffer) -> Float {
+    /// sqrt curve so quiet voices still register visually.
+    static func rms(of buffer: AVAudioPCMBuffer) -> Float {
         guard let channels = buffer.floatChannelData else { return 0 }
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return 0 }
