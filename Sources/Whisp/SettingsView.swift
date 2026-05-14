@@ -152,13 +152,41 @@ struct SettingsView: View {
     /// when something is not yet granted, since users in the steady state
     /// don't need to see it.
     private var staleEntryHint: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label("Whisp shows up in System Settings but the toggle won't stick?", systemImage: "exclamationmark.bubble")
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Whisp not showing up in System Settings? Use the + button.", systemImage: "exclamationmark.bubble.fill")
                 .font(.callout.weight(.medium))
-            Text("Find the existing \"Whisp\" row in the System Settings pane, select it, and click the **−** button to remove it. Then come back here and click **Open Settings** again — that adds a fresh entry tied to the current build's signature.")
+            Text("macOS 26 blocks unsigned apps like Whisp from auto-prompting for Accessibility and Input Monitoring. The canonical workaround:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("1.  Click **Open Settings** above. The System Settings pane opens.")
+                Text("2.  Click the **+** button at the bottom of the list.")
+                Text("3.  Navigate to **Whisp.app** (`Cmd+Shift+G` then paste the path below) and pick it.")
+                Text("4.  Toggle Whisp **on**. Whisp will see the grant within ~2s.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 6) {
+                Text("Whisp.app path:")
+                    .font(.caption.weight(.medium))
+                Text(Bundle.main.bundleURL.path)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(Bundle.main.bundleURL.path, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .buttonStyle(.borderless)
+                .help("Copy path")
+            }
+            .padding(.top, 4)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
