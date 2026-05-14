@@ -23,41 +23,27 @@ pkill -x Whisp && open -n /path/to/Whisp.app
 ## "After a rebuild my permissions are gone"
 
 **Cause:** macOS keys TCC permission grants by **bundle id + code-signing
-identity**. The default Whisp build uses ad-hoc signing (`codesign --sign -`),
+identity**. Whisp's dev builds use ad-hoc signing (`codesign --sign -`),
 which produces a different signature hash every build. macOS sees the new
 hash and decides "this is a new app", invalidating the grant.
 
-**Two fixes**, pick one:
-
-### Easy fix — re-grant once after each rebuild
-
-Open System Settings → Privacy & Security → Accessibility (or Input
-Monitoring) → toggle Whisp off and back on. Same for the others. Takes
-~20 seconds.
+**Fix:** open System Settings → Privacy & Security → Accessibility (or
+Input Monitoring) → toggle Whisp off and back on. Same for the others.
+Takes ~20 seconds.
 
 If Whisp shows up *twice* in the list (one with the old hash, one with
 the new), remove the older entry with the `−` button.
 
-### Permanent fix — sign with a stable local identity
-
-Run once:
-
-```bash
-./scripts/create-dev-cert.sh
-```
-
-This creates a self-signed certificate called **"Whisp Local Dev"** in
-your login keychain. From then on, `scripts/build-release.sh` signs every
-build with that identity, the signature hash stays identical across
-rebuilds, and macOS treats successive Whisp builds as the same app —
-grants survive.
-
-The cert is local-only (never leaves your machine, never chains to
-Apple), but it's enough for TCC.
+This is the same trade-off OpenSuperWhisper and VoiceInk ship with. The
+only permanent fix is signing with a stable Apple-issued Developer ID
+certificate ($99/year, opt-in via `WHISP_SIGN_IDENTITY` env var).
+Self-signed certs *seem* like an attractive middle ground but macOS
+Sequoia/26 silently distrusts them, so they don't actually help.
 
 ## "After a reboot my permissions are gone"
 
-Same cause as above. Take the **permanent fix** route.
+Same cause: ad-hoc signature changes invalidate TCC. Re-grant in System
+Settings.
 
 ## Whisp menu bar icon doesn't appear
 

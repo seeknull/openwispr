@@ -84,36 +84,30 @@ if [ ! -d "$MOONSHINE_FRAMEWORK" ]; then
     exit 1
 fi
 
-# Sign the bundle. macOS TCC (Microphone / Accessibility / Input Monitoring)
-# refuses to attribute permissions to a bundle with no signature at all,
-# so we always sign — at minimum ad-hoc.
+# Ad-hoc sign the bundle. macOS TCC refuses to attribute Microphone /
+# Accessibility / Input Monitoring grants to a fully unsigned binary, so
+# this is the minimum. The signature changes on every build, which means
+# TCC may treat rebuilt Whisp as a new app and ask you to re-grant — same
+# trade-off OpenSuperWhisper and VoiceInk ship with. See
+# docs/troubleshooting.md.
 #
-# Two paths:
-#   * Ad-hoc (default): `codesign --sign -`. Sufficient for first-launch
-#     grants. The signature hash differs across rebuilds, so macOS may
-#     decide a rebuilt Whisp is a "new" app and invalidate the grant —
-#     re-grant once when that happens. Same trade-off OpenSuperWhisper /
-#     VoiceInk ship with.
-#   * Stable local identity: if you've run `scripts/create-dev-cert.sh`,
-#     the build picks up that cert and grants persist across rebuilds.
-#
-# `xattr -cr` strips the quarantine attribute so Gatekeeper doesn't
-# block our own dev launches.
-SIGN_IDENTITY="${WHISP_SIGN_IDENTITY:-Whisp Local Dev}"
+# WHISP_SIGN_IDENTITY env var: set to "Developer ID Application: …" if
+# you have an Apple-issued certificate and want signed/notarized builds.
 ENTITLEMENTS="$WHISP_DIR/Sources/Whisp/Resources/Whisp.entitlements"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
-    echo "==> Codesigning with stable identity: $SIGN_IDENTITY"
+SIGN_IDENTITY="${WHISP_SIGN_IDENTITY:--}"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "==> Ad-hoc codesigning"
+    codesign --force --deep --sign - \
+        --entitlements "$ENTITLEMENTS" \
+        "$APP_DIR" >/dev/null
+else
+    echo "==> Codesigning with identity: $SIGN_IDENTITY"
     codesign --force --deep --options runtime \
         --sign "$SIGN_IDENTITY" \
         --entitlements "$ENTITLEMENTS" \
         "$APP_DIR" >/dev/null
-else
-    echo "==> Ad-hoc codesigning (grants may invalidate on rebuild)"
-    codesign --force --deep \
-        --sign - \
-        --entitlements "$ENTITLEMENTS" \
-        "$APP_DIR" >/dev/null
 fi
+# Strip any quarantine bit so Gatekeeper doesn't second-guess our dev launches.
 xattr -cr "$APP_DIR"
 
 echo "==> Zipping release..."
