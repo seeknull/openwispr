@@ -15,17 +15,20 @@ jobs:
     runs-on: macos-15
     steps:
       # Package.swift declares a local-path dependency on
-      # ../moonshine/swift. SwiftPM resolves the entire manifest before
-      # it'll run any test, even one filtered down to OpenWisprCore
-      # (which doesn't actually import Moonshine). So we need to put a
-      # moonshine repo next to ours.
+      # ../moonshine/swift, which in turn has a `.binaryTarget(path:
+      # "Moonshine.xcframework")`. SwiftPM validates that the
+      # xcframework actually exists before any compile or test starts
+      # — even one filtered down to OpenWisprCore, which doesn't
+      # actually import Moonshine.
       #
-      # We do NOT build Moonshine.xcframework here — that's a 3-min
-      # cmake build. SwiftPM only needs the Package.swift file to exist
-      # for resolution to succeed. The xcframework would only be needed
-      # if we actually compiled the MoonshineVoice target, which the
-      # OpenWisprCore filter avoids.
-      - name: Checkout moonshine (for SwiftPM resolution only)
+      # So the runner needs:
+      #   1. moonshine cloned alongside our repo at ../moonshine
+      #   2. Moonshine.xcframework built once (cached afterwards)
+      #
+      # The cache key is the moonshine repo SHA so any update to
+      # Moonshine invalidates and rebuilds. Steady-state CI run is
+      # ~30s; cold xcframework build is ~3 min.
+      - name: Checkout moonshine
         uses: actions/checkout@v4
         with:
           repository: moonshine-ai/moonshine
@@ -42,11 +45,21 @@ jobs:
           swift --version
           xcodebuild -version
 
-      # OpenWisprCore has zero non-Foundation deps, so we can run its
-      # tests without the heavy bootstrap of Moonshine.xcframework.
-      # Integration tests (which need the xcframework and a real
-      # Moonshine build) are run locally only — they require ~3 min of
-      # cmake setup that's wasteful for every PR.
+      - name: Cache Moonshine.xcframework
+        id: cache-xcf
+        uses: actions/cache@v4
+        with:
+          path: moonshine/swift/Moonshine.xcframework
+          key: moonshine-xcframework-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('moonshine/core/**', 'moonshine/scripts/build-swift.sh') }}
+
+      - name: Build Moonshine.xcframework (cache miss only)
+        if: steps.cache-xcf.outputs.cache-hit != 'true'
+        working-directory: moonshine
+        run: bash scripts/build-swift.sh
+
+      # OpenWisprCore has zero non-Foundation deps. Integration tests
+      # (which exercise MoonshineVoice + a real model) are run locally
+      # only — they need bundled model files we don't ship in CI.
       - name: swift test --filter OpenWisprCoreTests
         working-directory: openwispr
         run: swift test --filter OpenWisprCoreTests
