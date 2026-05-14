@@ -1,179 +1,174 @@
 import AppKit
 import SwiftUI
 
-/// Step-by-step onboarding shown when Whisp detects that its current
-/// code-signature differs from the one the user previously granted TCC
-/// against (i.e. ad-hoc rebuilt since the last successful grant). The
-/// user must still remove the stale row and toggle the new one — macOS
-/// doesn't let scripts do those bits — but everything around that is
-/// automated.
+/// Single-pane onboarding shown when Whisp's permissions are incomplete
+/// (first launch, or rebuilt app with stale TCC entries). Shows all three
+/// permissions in one view with live status; the user grants them in any
+/// order, the view auto-detects each one as it lands, and the "Restart
+/// Whisp" button enables only when everything is green.
+///
+/// Why no step-by-step wizard: each permission lives in a different
+/// System Settings pane, and users frequently bounce between them out
+/// of order. A flat list also means the window never has to re-render
+/// after a grant — which used to crash the app under macOS 26's
+/// constraint system (see commit log).
 struct FixupSheetView: View {
     @ObservedObject var permissions: PermissionsManager
     var onClose: () -> Void
 
-    @State private var step: Step = .intro
-
-    enum Step: Int { case intro, accessibility, inputMonitoring, done }
+    /// Re-poll system permissions while this view is visible. macOS gives
+    /// no notification when the user toggles Whisp on in System Settings,
+    /// so polling is the only way to react in near-real-time.
+    private let pollTimer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 18) {
             header
-            content
+            VStack(spacing: 12) {
+                permissionRow(
+                    title: "Microphone",
+                    description: "Capture audio to transcribe.",
+                    status: permissions.microphone,
+                    actionTitle: "Request"
+                ) {
+                    permissions.requestMicrophone()
+                }
+
+                permissionRow(
+                    title: "Accessibility",
+                    description: "Paste or type the transcript into the focused app.",
+                    status: permissions.accessibility,
+                    actionTitle: "Open Settings"
+                ) {
+                    permissions.requestAccessibility()
+                }
+
+                permissionRow(
+                    title: "Input Monitoring",
+                    description: "Watch for the Fn + Option hotkey.",
+                    status: permissions.inputMonitoring,
+                    actionTitle: "Open Settings"
+                ) {
+                    permissions.requestInputMonitoring()
+                }
+            }
+
+            staleEntryHint
+
             Spacer(minLength: 0)
+
             footer
         }
         .padding(24)
-        // Fixed width AND height — without a height, SwiftUI lets the
-        // hosting NSWindow renegotiate size every time `step` changes,
-        // which AppKit's auto-layout machinery in macOS 26 considers
-        // an exception-worthy constraint thrash and crashes the app.
-        .frame(width: 540, height: 360)
+        // Fixed width AND height so SwiftUI never tries to renegotiate
+        // the window size mid-update — that triggers an AppKit constraint
+        // exception under macOS 26 and crashes the app.
+        .frame(width: 540, height: 460)
+        .onReceive(pollTimer) { _ in permissions.refresh() }
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.shield.fill")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 32, height: 32)
+                .frame(width: 36, height: 36)
                 .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Re-grant Whisp's permissions")
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Whisp needs these permissions to work")
                     .font(.title3.weight(.semibold))
-                Text("This build of Whisp has a new code signature, so your previous TCC grants no longer apply.")
+                Text("Grant each one below. Whisp detects every grant automatically — you can take them in any order, and you don't need to come back here between steps.")
                     .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: - Rows
+
+    private func permissionRow(
+        title: String,
+        description: String,
+        status: PermissionStatus,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            statusIcon(status)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(description)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if status == .granted {
+                Text("Granted")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.green)
+            } else {
+                Button(actionTitle, action: action)
+            }
         }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(status == .granted
+                      ? Color.green.opacity(0.10)
+                      : Color.gray.opacity(0.10))
+        )
     }
 
     @ViewBuilder
-    private var content: some View {
-        switch step {
-        case .intro:
-            intro
-        case .accessibility:
-            permissionStep(
-                title: "Step 1 of 2 — Accessibility",
-                description: "Whisp uses this to paste / type the transcript into your focused app.",
-                permissionGranted: permissions.accessibility == .granted,
-                openButton: {
-                    permissions.openAccessibilityPane()
-                }
-            )
-        case .inputMonitoring:
-            permissionStep(
-                title: "Step 2 of 2 — Input Monitoring",
-                description: "Whisp uses this to watch for the Fn+Option hotkey.",
-                permissionGranted: permissions.inputMonitoring == .granted,
-                openButton: {
-                    permissions.openInputMonitoringPane()
-                }
-            )
-        case .done:
-            done
+    private func statusIcon(_ status: PermissionStatus) -> some View {
+        switch status {
+        case .granted:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .imageScale(.large)
+        case .denied:
+            Image(systemName: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+                .imageScale(.large)
+        case .notDetermined:
+            Image(systemName: "circle.dashed")
+                .foregroundStyle(.secondary)
+                .imageScale(.large)
         }
     }
 
-    private var intro: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Whisp just cleared its old grants. Two short steps left:")
-                .font(.body)
-            stepHint(
-                "1. Open the System Settings pane Whisp will jump you to.",
-                detail: "If you see an old \"Whisp\" entry there, click it and press the `−` button to remove it."
-            )
-            stepHint(
-                "2. Toggle Whisp on.",
-                detail: "Whisp will detect the grant automatically (no need to come back here)."
-            )
-            Text("If you don't see a stale entry, you can skip step 1 — just toggle on.")
+    // MARK: - Stale entry hint
+
+    private var staleEntryHint: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Don't see Whisp in System Settings, or it's there but still won't grant?")
+                .font(.caption.weight(.medium))
+            Text("Find any existing \"Whisp\" row in the System Settings pane and click the **−** button to remove it, then come back here and click **Open Settings** again to add a fresh entry.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.top, 6)
+                .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private func stepHint(_ title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).fontWeight(.medium)
-            Text(detail).font(.caption).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.12)))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.yellow.opacity(0.12)))
     }
 
-    private func permissionStep(
-        title: String,
-        description: String,
-        permissionGranted: Bool,
-        openButton: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
-            Text(description).font(.callout).foregroundStyle(.secondary)
-            HStack {
-                Button("Open System Settings", action: openButton)
-                Spacer()
-                if permissionGranted {
-                    Label("Granted", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
-                    Label("Waiting…", systemImage: "ellipsis.circle")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    private var done: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("All set", systemImage: "checkmark.seal.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.green)
-            Text("Whisp now has all the permissions it needs. Press **Restart Whisp** so the new grant takes effect.")
-                .font(.callout)
-        }
-    }
+    // MARK: - Footer
 
     private var footer: some View {
         HStack {
-            Button("Skip", action: onClose)
+            Button("Close", action: onClose)
             Spacer()
-            primaryButton
-        }
-    }
-
-    @ViewBuilder
-    private var primaryButton: some View {
-        switch step {
-        case .intro:
-            Button("Start") {
-                step = .accessibility
-                permissions.openAccessibilityPane()
-            }
-            .keyboardShortcut(.defaultAction)
-        case .accessibility:
-            Button(permissions.accessibility == .granted ? "Next" : "I'll do it later") {
-                step = .inputMonitoring
-                if permissions.inputMonitoring != .granted {
-                    permissions.openInputMonitoringPane()
-                }
-            }
-            .keyboardShortcut(.defaultAction)
-        case .inputMonitoring:
-            Button("Continue") {
-                step = .done
-            }
-            .keyboardShortcut(.defaultAction)
-            .disabled(permissions.inputMonitoring != .granted)
-        case .done:
             Button("Restart Whisp") {
                 permissions.restartWhisp()
             }
             .keyboardShortcut(.defaultAction)
+            .disabled(!permissions.allGranted)
         }
     }
 }

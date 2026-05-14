@@ -208,7 +208,7 @@ final class MenuBarController: NSObject {
             // exception (-[NSApplication _crashOnException:]).
             host.sizingOptions = []
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 540, height: 360),
+                contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -216,6 +216,12 @@ final class MenuBarController: NSObject {
             window.contentViewController = host
             window.title = "Whisp — Re-grant permissions"
             window.isReleasedWhenClosed = false
+            // Float above other windows so when the user opens System
+            // Settings to grant a permission, the fixup window stays
+            // visible and they can see the live status update.
+            window.level = .floating
+            // Stay open across spaces and when other apps activate.
+            window.collectionBehavior = [.canJoinAllSpaces, .moveToActiveSpace]
             window.center()
             window.identifier = NSUserInterfaceItemIdentifier("WhispFixupWindow")
             window.setAccessibilityIdentifier("WhispFixupWindow")
