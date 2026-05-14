@@ -93,17 +93,21 @@ final class MenuBarController: NSObject {
             statusItem.button?.image = idleIcon
             statusItem.button?.image?.isTemplate = true
             hud.hide()
-            // Keep the hotkey state machine's bookkeeping in sync with the
-            // engine. Without this, the next hotkey press could toggle from
-            // a stale "true" → "false" and silently no-op against an
-            // already-stopped engine, requiring a second press to actually
-            // start.
             hotkey.syncListeningState(false)
+        case .starting:
+            // Same visual as idle; engine will flip us to .listening
+            // within ~ms once it warms up. We could draw a pulsing
+            // amber dot here but it's brief enough to skip.
+            statusItem.button?.image = idleIcon
         case .listening:
             statusItem.button?.image = listeningIcon
             statusItem.button?.image?.isTemplate = false
             if settings.showHUD { hud.show() }
             hotkey.syncListeningState(true)
+        case .stopping:
+            // Hide the HUD eagerly; engine will flip us to .idle once
+            // the final transcript line flushes.
+            hud.hide()
         case .error(let msg):
             statusItem.button?.image = idleIcon
             statusItem.button?.toolTip = "Whisp — \(msg)"
