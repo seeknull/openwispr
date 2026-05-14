@@ -19,10 +19,15 @@ struct FixupSheetView: View {
         VStack(spacing: 16) {
             header
             content
+            Spacer(minLength: 0)
             footer
         }
         .padding(24)
-        .frame(width: 540)
+        // Fixed width AND height — without a height, SwiftUI lets the
+        // hosting NSWindow renegotiate size every time `step` changes,
+        // which AppKit's auto-layout machinery in macOS 26 considers
+        // an exception-worthy constraint thrash and crashes the app.
+        .frame(width: 540, height: 360)
     }
 
     private var header: some View {

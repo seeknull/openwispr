@@ -201,9 +201,20 @@ final class MenuBarController: NSObject {
                 onClose: { [weak self] in self?.fixupWindow?.close() }
             )
             let host = NSHostingController(rootView: view)
-            let window = NSWindow(contentViewController: host)
+            // Pin the hosting controller to the view's intrinsic size and
+            // disable SwiftUI's auto-resize negotiation with the window.
+            // Without this, switching steps inside the view triggers a
+            // window constraint thrash that macOS 26 turns into a fatal
+            // exception (-[NSApplication _crashOnException:]).
+            host.sizingOptions = []
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 540, height: 360),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentViewController = host
             window.title = "Whisp — Re-grant permissions"
-            window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()
             window.identifier = NSUserInterfaceItemIdentifier("WhispFixupWindow")

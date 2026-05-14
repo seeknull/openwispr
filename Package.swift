@@ -26,7 +26,17 @@ let package = Package(
                 .product(name: "MoonshineVoice", package: "Moonshine"),
             ],
             path: "Sources/Whisp",
-            exclude: ["Resources/Info.plist", "Resources/Whisp.entitlements"],
+            exclude: [
+                "Resources/Info.plist",
+                "Resources/Whisp.entitlements",
+                // Models are downloaded into Resources/models/ by
+                // scripts/download-models.sh and copied straight into
+                // Contents/Resources/models/ by scripts/build-release.sh.
+                // We exclude them from SwiftPM so it doesn't bundle them
+                // into the Whisp_Whisp.bundle and produce 'unhandled file'
+                // warnings on every build.
+                "Resources/models",
+            ],
             resources: [
                 .process("Resources/Assets.xcassets"),
             ]
