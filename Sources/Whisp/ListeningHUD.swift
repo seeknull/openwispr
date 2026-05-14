@@ -66,14 +66,15 @@ private struct HUDView: View {
                 .opacity(pulse ? 0.6 : 1.0)
                 .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulse)
             Text("Listening… Fn+Option to stop")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 22)
-                .fill(.ultraThinMaterial)
+                .fill(Color.red.opacity(0.85))
+                .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 2)
         )
         .onAppear { pulse = true }
     }

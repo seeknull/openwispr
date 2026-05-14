@@ -105,11 +105,23 @@ final class MenuBarController: NSObject {
         return img
     }
 
+    /// While listening we draw an explicit red record dot so it's obvious
+    /// from across the menu bar. SF Symbols' palette colors are sometimes
+    /// stripped by the menu bar renderer, so we render a custom NSImage.
     private var listeningIcon: NSImage? {
-        let cfg = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-        let img = NSImage(systemSymbolName: "waveform.circle.fill",
-                          accessibilityDescription: "Whisp listening")
-        return img?.withSymbolConfiguration(cfg)
+        let size = NSSize(width: 22, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            // Soft red record dot, slightly larger than centered
+            NSColor.systemRed.setFill()
+            let dot = NSBezierPath(ovalIn: NSRect(x: rect.width / 2 - 5,
+                                                  y: rect.height / 2 - 5,
+                                                  width: 10, height: 10))
+            dot.fill()
+            return true
+        }
+        image.isTemplate = false  // preserve the red tint
+        image.accessibilityDescription = "Whisp listening"
+        return image
     }
 
     // MARK: - Menu actions

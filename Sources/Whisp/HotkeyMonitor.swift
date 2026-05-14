@@ -1,6 +1,9 @@
 import AppKit
 import CoreGraphics
+import OSLog
 import WhispCore
+
+private let log = Logger(subsystem: "ai.whisp.app", category: "HotkeyMonitor")
 
 /// Watches for the configured hotkey at the HID level using a CGEventTap.
 ///
@@ -99,6 +102,7 @@ final class HotkeyMonitor {
         // If the tap was disabled (e.g., system rejected an unusual amount of
         // work in the callback), re-enable it.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            log.warning("Event tap disabled (\(type.rawValue, privacy: .public)) — re-enabling")
             if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
             return
         }
@@ -107,12 +111,19 @@ final class HotkeyMonitor {
         let flags = event.flags
         let held = modifiersAllHeld(flags: flags)
 
+        // Trace at debug level: every flagsChanged event we see, with the
+        // raw mask, whether our hotkey is satisfied, and what the state
+        // machine decides. Surface with:
+        //   log stream --predicate 'subsystem == "ai.whisp.app"' --level=debug
+        log.debug("flagsChanged raw=\(flags.rawValue, privacy: .public) held=\(held, privacy: .public)")
+
         let now = Date().timeIntervalSinceReferenceDate
         let effect: HotkeyStateMachine.Effect = held
             ? stateMachine.modifiersPressed(now: now)
             : stateMachine.modifiersReleased()
 
         if effect != .none {
+            log.info("Hotkey effect: \(String(describing: effect), privacy: .public)")
             let handler = onEffect
             Task { @MainActor in handler(effect) }
         }
