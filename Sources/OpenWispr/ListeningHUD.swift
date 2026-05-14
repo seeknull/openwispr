@@ -1,19 +1,23 @@
 import AppKit
 import QuartzCore
 
-/// Tiny translucent pill that floats near the bottom of the screen while
-/// OpenWispr is listening. Shows a pulsing red record dot + a 3-bar
-/// equalizer that animates from live microphone input level.
+/// Small translucent pill that floats near the bottom of the screen while
+/// OpenWispr is listening. Renders a 9-bar live waveform driven by the
+/// microphone level.
 ///
 /// ## Design choices
 ///
-/// - **Translucent** `NSVisualEffectView` blur with a 12% red tint.
-///   Never makes the content underneath unreadable.
-/// - **3-bar visualizer**, not text: the bars move with the mic input
-///   so the user can see at a glance that the microphone is actually
-///   hearing them. Solves the "is it on?" doubt without copy.
-/// - **Bottom-center placement**: out of the way of menu bars, window
-///   chrome, and active editing areas which tend to live near the top.
+/// - **Single unified visual**: just an animated waveform. No dot, no
+///   label, no extra glyphs competing for the small canvas.
+/// - **Clean blur**: `NSVisualEffectView` with `.hudWindow` material,
+///   no red wash. Matches macOS system HUDs (volume, brightness) which
+///   stay neutral and let the content carry meaning.
+/// - **Red bars**: the listening = red signal is preserved via the
+///   bar colour. Cleaner than tinting the whole pill.
+/// - **Staggered phases**: each bar reacts to the same mic level with a
+///   small phase offset so the wave looks alive (like a real waveform),
+///   not nine identical bars in sync.
+/// - **Bottom-center**: out of the way of menu bars and editor chrome.
 ///
 /// ## Why AppKit and not SwiftUI
 ///
@@ -52,67 +56,78 @@ final class ListeningHUD {
             let frame = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(
                 x: frame.midX - size.width / 2,
-                y: frame.minY + 48
+                y: frame.minY + 56
             ))
         }
 
         panel.orderFrontRegardless()
-        contentView.startPulsing()
+        contentView.startIdleAnimation()
         self.panel = panel
         self.contentView = contentView
     }
 
     func hide() {
-        contentView?.stopPulsing()
+        contentView?.stopAnimation()
         panel?.orderOut(nil)
         panel = nil
         contentView = nil
     }
 
     /// Update the bar visualizer with a fresh mic level (0...1). Safe
-    /// to call at audio-tap rates; the view animates short, so frequent
-    /// updates feel smooth without flooding the layer tree.
+    /// to call at audio-tap rates.
     func setLevel(_ level: Float) {
         contentView?.setLevel(level)
     }
 }
 
-/// Translucent capsule: pulsing red dot + 3-bar audio level visualizer.
+/// Translucent capsule with a live waveform of 9 rounded vertical bars.
+/// Each bar reacts to the same input level with a slight phase offset
+/// so the visualization looks like an animated waveform rather than 9
+/// identical bars.
 @MainActor
 private final class HUDContentView: NSView {
-    private static let height: CGFloat = 26
-    private static let dotDiameter: CGFloat = 7
-    private static let leadingInset: CGFloat = 11
-    private static let dotToBarsGap: CGFloat = 7
-    private static let barWidth: CGFloat = 2.5
-    private static let barSpacing: CGFloat = 2.5
-    private static let barCount: Int = 3
-    private static let trailingInset: CGFloat = 11
-    private static let minBarHeight: CGFloat = 4
-    private static let maxBarHeight: CGFloat = 16
+    // Pill geometry — chosen to feel proportional, not cramped.
+    private static let width: CGFloat = 132
+    private static let height: CGFloat = 34
+    private static let cornerRadius: CGFloat = 17
 
-    private let dotLayer = CAShapeLayer()
+    // Bar geometry.
+    private static let barCount: Int = 9
+    private static let barWidth: CGFloat = 3
+    private static let barSpacing: CGFloat = 4
+    private static let minBarHeight: CGFloat = 4
+    private static let maxBarHeight: CGFloat = 22
+
     private let visualEffect = NSVisualEffectView()
     private var barLayers: [CALayer] = []
 
+    // Per-bar phase offsets (radians) so the wave isn't uniform. Tuned
+    // by eye — symmetric around the center bar, edges slightly behind.
+    private static let phaseOffsets: [CGFloat] = [
+        0.00, 0.18, 0.36, 0.54, 0.72, 0.54, 0.36, 0.18, 0.00
+    ]
+
+    // Per-bar amplitude weights — center bar tallest, fading to edges,
+    // so the waveform has a natural "speech" silhouette.
+    private static let amplitudeWeights: [CGFloat] = [
+        0.55, 0.72, 0.88, 0.96, 1.00, 0.96, 0.88, 0.72, 0.55
+    ]
+
+    // Idle animation: a gentle sine wobble so the HUD shows it's "alive"
+    // even before any audio arrives.
+    private var idleTimer: Timer?
+    private var idlePhase: CGFloat = 0
+    private var lastInputLevel: CGFloat = 0
+    private var lastInputAt: Date = .distantPast
+
     override var intrinsicContentSize: NSSize {
-        let barsBlockWidth = CGFloat(Self.barCount) * Self.barWidth
-            + CGFloat(Self.barCount - 1) * Self.barSpacing
-        let width = Self.leadingInset
-            + Self.dotDiameter
-            + Self.dotToBarsGap
-            + barsBlockWidth
-            + Self.trailingInset
-        return NSSize(width: width, height: Self.height)
+        NSSize(width: Self.width, height: Self.height)
     }
 
     init() {
-        super.init(frame: NSRect(origin: .zero, size: NSSize(width: 60, height: Self.height)))
-        let computed = intrinsicContentSize
-        frame = NSRect(origin: .zero, size: computed)
+        super.init(frame: NSRect(origin: .zero, size: NSSize(width: Self.width, height: Self.height)))
         wantsLayer = true
         setupBlur()
-        setupDot()
         setupBars()
     }
 
@@ -125,88 +140,88 @@ private final class HUDContentView: NSView {
         visualEffect.blendingMode = .behindWindow
         visualEffect.state = .active
         visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = bounds.height / 2
+        visualEffect.layer?.cornerRadius = Self.cornerRadius
         visualEffect.layer?.masksToBounds = true
         addSubview(visualEffect)
-
-        let tint = CALayer()
-        tint.frame = bounds
-        tint.backgroundColor = NSColor.systemRed.withAlphaComponent(0.12).cgColor
-        tint.cornerRadius = bounds.height / 2
-        tint.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        visualEffect.layer?.addSublayer(tint)
-    }
-
-    private func setupDot() {
-        let dotY = (bounds.height - Self.dotDiameter) / 2
-        let dotRect = NSRect(
-            x: Self.leadingInset,
-            y: dotY,
-            width: Self.dotDiameter,
-            height: Self.dotDiameter
-        )
-        dotLayer.path = CGPath(ellipseIn: dotRect, transform: nil)
-        dotLayer.fillColor = NSColor.systemRed.cgColor
-        // Add to the visualEffect's layer rather than self.layer —
-        // visualEffect renders opaquely on top of the host view's
-        // backing layer, so any sublayer of self.layer would be
-        // hidden behind it.
-        visualEffect.layer?.addSublayer(dotLayer)
     }
 
     private func setupBars() {
-        let startX = Self.leadingInset + Self.dotDiameter + Self.dotToBarsGap
+        let barsBlockWidth = CGFloat(Self.barCount) * Self.barWidth
+            + CGFloat(Self.barCount - 1) * Self.barSpacing
+        let startX = (Self.width - barsBlockWidth) / 2
+
         for i in 0..<Self.barCount {
             let layer = CALayer()
             let x = startX + CGFloat(i) * (Self.barWidth + Self.barSpacing)
-            let height = Self.minBarHeight
-            let y = (bounds.height - height) / 2
-            layer.frame = NSRect(x: x, y: y, width: Self.barWidth, height: height)
-            layer.backgroundColor = NSColor.labelColor.withAlphaComponent(0.85).cgColor
+            let h = Self.minBarHeight
+            let y = (Self.height - h) / 2
+            layer.frame = NSRect(x: x, y: y, width: Self.barWidth, height: h)
+            layer.backgroundColor = NSColor.systemRed.cgColor
             layer.cornerRadius = Self.barWidth / 2
-            // Same reason as the dot: add to the visualEffect layer so
-            // we render *above* the blur, not underneath it.
+            // Render above the blur, not under it.
             visualEffect.layer?.addSublayer(layer)
             barLayers.append(layer)
         }
     }
 
-    /// Drive the bars from a 0...1 mic level. Each bar gets a slightly
-    /// different scale + phase so the visualization looks like activity,
-    /// not a single bar tripled.
+    /// Drive the bars from a 0...1 mic level.
     func setLevel(_ level: Float) {
-        let l = max(0, min(1, CGFloat(level)))
-        // Per-bar coefficients give a slight visual variation — the
-        // center bar typically loudest, outer bars trail slightly.
-        let coefficients: [CGFloat] = [0.80, 1.00, 0.70]
+        let clamped = max(0, min(1, CGFloat(level)))
+        lastInputLevel = clamped
+        lastInputAt = Date()
+        renderBars(baseLevel: clamped)
+    }
+
+    /// Start a low-rate idle animation so the HUD has movement even
+    /// when the mic is quiet (or no audio is arriving yet). Cancels
+    /// itself as soon as real input starts flowing.
+    func startIdleAnimation() {
+        stopAnimation()
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                // Use the most-recent real input level if it arrived in
+                // the last 200ms; otherwise fall back to a gentle
+                // 0.05 floor with a sine wobble.
+                let now = Date()
+                let recent = now.timeIntervalSince(self.lastInputAt) < 0.20
+                let base: CGFloat = recent ? self.lastInputLevel : 0.05
+                self.idlePhase += 0.18
+                self.renderBars(baseLevel: base)
+            }
+        }
+    }
+
+    func stopAnimation() {
+        idleTimer?.invalidate()
+        idleTimer = nil
+    }
+
+    /// Recompute every bar's height from a base level + per-bar weights
+    /// and the rolling idle phase. Wrapped in a CATransaction so all 9
+    /// bars animate as one frame.
+    private func renderBars(baseLevel: CGFloat) {
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.08)
+        CATransaction.setAnimationDuration(0.10)
+        CATransaction.setAnimationTimingFunction(
+            CAMediaTimingFunction(name: .easeOut)
+        )
+
         for (i, layer) in barLayers.enumerated() {
-            let scaled = l * coefficients[i % coefficients.count]
+            let weight = Self.amplitudeWeights[i % Self.amplitudeWeights.count]
+            let phase = Self.phaseOffsets[i % Self.phaseOffsets.count]
+            // Sinusoidal modulation on top of the base level so each
+            // bar has a slightly different live shape. Modulation
+            // amplitude scales with the base level — at silence the
+            // wobble is tiny, at full volume it's pronounced.
+            let modulation = sin(idlePhase + phase) * 0.25 * baseLevel
+            let scaled = max(0, min(1, baseLevel * weight + modulation))
             let h = Self.minBarHeight + (Self.maxBarHeight - Self.minBarHeight) * scaled
             var frame = layer.frame
             frame.size.height = h
-            frame.origin.y = (bounds.height - h) / 2
+            frame.origin.y = (Self.height - h) / 2
             layer.frame = frame
         }
         CATransaction.commit()
-    }
-
-    /// Smooth opacity pulse on the red dot. Independent of the bars —
-    /// the dot pulses on the listening cadence, the bars react to mic
-    /// activity.
-    func startPulsing() {
-        let opacity = CABasicAnimation(keyPath: "opacity")
-        opacity.fromValue = 1.0
-        opacity.toValue = 0.35
-        opacity.duration = 0.85
-        opacity.autoreverses = true
-        opacity.repeatCount = .infinity
-        opacity.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        dotLayer.add(opacity, forKey: "pulse")
-    }
-
-    func stopPulsing() {
-        dotLayer.removeAllAnimations()
     }
 }
