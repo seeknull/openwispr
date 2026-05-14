@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenWispr — local, open-source dictation for macOS</title>
+  <meta name="description" content="Press a hotkey, talk, the text appears at your cursor. Free, MIT-licensed, fully on-device. No accounts, no telemetry, no network calls." />
+
+  <meta property="og:title" content="OpenWispr" />
+  <meta property="og:description" content="Local, open-source dictation for macOS. Press Fn+Option, talk, text appears at your cursor." />
+  <meta property="og:type" content="website" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="nav">
+  <a href="#" class="brand">
+    <span class="brand-dot"></span>
+    OpenWispr
+  </a>
+  <nav class="links">
+    <a href="#features">Features</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#install">Install</a>
+    <a href="https://github.com/seeknull/openwispr" target="_blank" rel="noopener">GitHub →</a>
+  </nav>
+</header>
+
+<main>
+
+<section class="hero">
+  <h1>
+    Speak.<br>
+    The text appears<br>
+    <span class="accent">where your cursor is.</span>
+  </h1>
+  <p class="sub">
+    Free, open source, fully on-device dictation for macOS.<br>
+    No accounts. No keys. No data leaves your Mac.
+  </p>
+  <div class="cta-row">
+    <a class="cta cta-primary" href="#install">Download for macOS</a>
+    <a class="cta cta-secondary" href="https://github.com/seeknull/openwispr" target="_blank" rel="noopener">View on GitHub</a>
+  </div>
+  <p class="hero-note">macOS 13 or later · Apple Silicon &amp; Intel · MIT licensed</p>
+</section>
+
+<section class="how">
+  <h2>How it works</h2>
+  <div class="how-grid">
+    <div class="how-card">
+      <div class="how-num">1</div>
+      <h3>Press the hotkey</h3>
+      <p><span class="kbd">Fn</span> + <span class="kbd">Option</span> anywhere in macOS. OpenWispr starts listening.</p>
+    </div>
+    <div class="how-card">
+      <div class="how-num">2</div>
+      <h3>Talk</h3>
+      <p>Moonshine transcribes as you speak. On your CPU. No network.</p>
+    </div>
+    <div class="how-card">
+      <div class="how-num">3</div>
+      <h3>Stop and paste</h3>
+      <p>Press the hotkey again. The transcript appears at your cursor in whatever app you're in.</p>
+    </div>
+  </div>
+</section>
+
+<section id="privacy" class="privacy">
+  <h2>Your voice stays on your Mac.</h2>
+  <p class="privacy-lede">
+    We don't promise not to send your audio anywhere. We made it
+    architecturally impossible.
+  </p>
+
+  <div class="privacy-grid">
+    <div class="pcard">
+      <div class="pcard-icon">⊘</div>
+      <h3>No network code</h3>
+      <p>The dictation path has zero <code>URLSession</code> calls, zero HTTP, zero sockets. Verify it yourself with <code>grep</code>.</p>
+    </div>
+    <div class="pcard">
+      <div class="pcard-icon">⊙</div>
+      <h3>No telemetry</h3>
+      <p>No analytics SDK. No "anonymous usage data." No crash reporters that phone home. The app has nothing to phone with.</p>
+    </div>
+    <div class="pcard">
+      <div class="pcard-icon">⌂</div>
+      <h3>Model runs locally</h3>
+      <p>The speech-to-text model ships with the app and runs on your CPU. Internet off? OpenWispr still works.</p>
+    </div>
+    <div class="pcard">
+      <div class="pcard-icon">⌚</div>
+      <h3>No accounts</h3>
+      <p>No sign-in. No license server. No "free tier vs. pro tier" — there's just one tier and it's free.</p>
+    </div>
+    <div class="pcard">
+      <div class="pcard-icon">◧</div>
+      <h3>MIT licensed</h3>
+      <p>Read every line. Audit every line. Fork it. Sell a derivative. You own what runs on your machine.</p>
+    </div>
+  </div>
+
+  <div class="proof">
+    <p class="proof-label">Don't take our word for it — verify in three minutes:</p>
+<pre><code>git clone https://github.com/seeknull/openwispr.git
+cd openwispr
+grep -r "URLSession\|http://\|https://" Sources/</code></pre>
+    <p class="proof-note">The only matches are a link to this repo in the About window. The transcription path touches nothing but local files and your microphone.</p>
+  </div>
+</section>
+
+<section id="features" class="features">
+  <h2>What you get</h2>
+  <div class="feat-grid">
+    <div class="feat">
+      <h3>⚡ Fast</h3>
+      <p>Powered by <a href="https://moonshine.ai" target="_blank" rel="noopener">Moonshine</a> — ~5× faster than Whisper at comparable accuracy. Built for live dictation, not 30-second batches.</p>
+    </div>
+    <div class="feat">
+      <h3>⌨️ Works everywhere</h3>
+      <p>Editor, terminal, Slack, Gmail, Notes, browser address bar — anywhere your cursor blinks, OpenWispr can type.</p>
+    </div>
+    <div class="feat">
+      <h3>🪶 Tiny</h3>
+      <p>Pure Swift. No Electron. No Python runtime. ~50 MB of binary plus the model file you pick.</p>
+    </div>
+    <div class="feat">
+      <h3>🎛 Configurable insertion</h3>
+      <p>Clipboard paste (fast, universal) or synthesized keystrokes (no clipboard interference). Choose per-task.</p>
+    </div>
+    <div class="feat">
+      <h3>🧪 Self-test built in</h3>
+      <p>OpenWispr checks every subsystem on launch and shows a colored menu bar icon. No more "is it broken?" guessing.</p>
+    </div>
+    <div class="feat">
+      <h3>📜 MIT license</h3>
+      <p>Use it commercially. Fork it. Ship derivatives. Just keep the copyright notice. That's the whole deal.</p>
+    </div>
+  </div>
+</section>
+
+<section id="install" class="install">
+  <h2>Install</h2>
+  <ol class="install-steps">
+    <li>
+      <strong>Download</strong> the latest
+      <code>OpenWispr-&lt;version&gt;.zip</code> from
+      <a href="https://github.com/seeknull/openwispr/releases" target="_blank" rel="noopener">GitHub Releases</a>.
+    </li>
+    <li>
+      <strong>Unzip</strong> and drag <code>OpenWispr.app</code> to
+      <code>/Applications</code>.
+    </li>
+    <li>
+      <strong>Right-click → Open</strong> the first time (the build is
+      unsigned; this is a one-time Gatekeeper acceptance).
+    </li>
+    <li>
+      <strong>Grant permissions</strong> when prompted: Microphone and
+      Accessibility. That's all OpenWispr needs.
+    </li>
+    <li>
+      Press <span class="kbd">Fn</span> + <span class="kbd">Option</span>
+      anywhere, talk, press again. Text appears at the cursor.
+    </li>
+  </ol>
+  <p class="install-or">
+    Want to build from source instead? <a href="https://github.com/seeknull/openwispr#build-from-source">See the README</a>.
+  </p>
+</section>
+
+<section class="faq">
+  <h2>Common questions</h2>
+
+  <details>
+    <summary>Is OpenWispr really free?</summary>
+    <p>Yes. MIT-licensed, no upsell, no paid tier. There is no business model.</p>
+  </details>
+
+  <details>
+    <summary>How is this different from macOS's built-in dictation?</summary>
+    <p>Apple's dictation is good for short phrases but ships per-app limits, has a server fallback on older Macs, and isn't open source. OpenWispr runs the same regardless of network state, supports arbitrarily long sessions, and you can audit the audio path.</p>
+  </details>
+
+  <details>
+    <summary>What model does OpenWispr use?</summary>
+    <p><a href="https://moonshine.ai" target="_blank" rel="noopener">Moonshine</a>, an English-first speech-to-text family from Moonshine AI. The default build ships <code>medium-streaming-en</code> (~280 MB) which is comparable to Whisper Large V3 in accuracy at a fraction of the size and latency.</p>
+  </details>
+
+  <details>
+    <summary>Does it work offline?</summary>
+    <p>Completely. Pull the ethernet cable, turn off Wi-Fi — OpenWispr keeps working. The model is on your disk.</p>
+  </details>
+
+  <details>
+    <summary>What languages are supported?</summary>
+    <p>The default bundled model is English. Moonshine also has Spanish, Mandarin, Japanese, Korean, Vietnamese, Ukrainian, and Arabic models. Multi-language model selection in-app is on the roadmap.</p>
+  </details>
+
+  <details>
+    <summary>Can I rebind the hotkey?</summary>
+    <p>Not yet — it's hard-coded to Fn+Option in v0.1. Rebinding is on the roadmap for v0.2.</p>
+  </details>
+
+  <details>
+    <summary>Why does OpenWispr need Accessibility permission?</summary>
+    <p>Two reasons: (1) to paste or type the transcript into the focused app, and (2) to observe the Fn+Option hotkey via <code>NSEvent.addGlobalMonitorForEvents</code>. We deliberately don't use the more invasive Input Monitoring permission.</p>
+  </details>
+
+  <details>
+    <summary>Is OpenWispr available on Windows / Linux?</summary>
+    <p>Not today. The codebase is macOS-only. Cross-platform isn't on the immediate roadmap.</p>
+  </details>
+
+  <details>
+    <summary>I'd like to contribute.</summary>
+    <p>Wonderful. The codebase is ~1800 lines of Swift, well-commented. See <a href="https://github.com/seeknull/openwispr/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>. Issues and PRs welcome on <a href="https://github.com/seeknull/openwispr" target="_blank" rel="noopener">GitHub</a>.</p>
+  </details>
+</section>
+
+<section class="final-cta">
+  <h2>Stop typing. Start talking.</h2>
+  <p>Download OpenWispr — it's free.</p>
+  <a class="cta cta-primary" href="https://github.com/seeknull/openwispr/releases" target="_blank" rel="noopener">Download for macOS</a>
+</section>
+
+</main>
+
+<footer>
+  <div class="foot-grid">
+    <div>
+      <div class="brand">
+        <span class="brand-dot"></span>
+        OpenWispr
+      </div>
+      <p class="tagline">Local, open-source dictation for macOS.</p>
+    </div>
+    <div>
+      <h4>Project</h4>
+      <a href="https://github.com/seeknull/openwispr" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/seeknull/openwispr/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/seeknull/openwispr/issues" target="_blank" rel="noopener">Issues</a>
+    </div>
+    <div>
+      <h4>Docs</h4>
+      <a href="https://github.com/seeknull/openwispr/blob/main/docs/install.md">Install</a>
+      <a href="https://github.com/seeknull/openwispr/blob/main/docs/usage.md">Usage</a>
+      <a href="https://github.com/seeknull/openwispr/blob/main/docs/troubleshooting.md">Troubleshooting</a>
+      <a href="https://github.com/seeknull/openwispr/blob/main/docs/architecture.md">Architecture</a>
+    </div>
+    <div>
+      <h4>Built on</h4>
+      <a href="https://moonshine.ai" target="_blank" rel="noopener">Moonshine</a>
+      <a href="https://swift.org" target="_blank" rel="noopener">Swift</a>
+    </div>
+  </div>
+  <p class="copy">© 2026 OpenWispr contributors. MIT licensed.</p>
+</footer>
+
+</body>
+</html>

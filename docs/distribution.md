@@ -49,10 +49,10 @@ OpenWispr has a Developer ID, a cask becomes straightforward:
 cask "openwispr" do
   version "0.2.0"
   sha256 "..."
-  url "https://github.com/your-org/openwispr/releases/download/v#{version}/OpenWispr-#{version}.zip"
+  url "https://github.com/seeknull/openwispr/releases/download/v#{version}/OpenWispr-#{version}.zip"
   name "OpenWispr"
   desc "Open-source dictation for macOS"
-  homepage "https://github.com/your-org/openwispr"
+  homepage "https://github.com/seeknull/openwispr"
   app "OpenWispr.app"
 end
 ```

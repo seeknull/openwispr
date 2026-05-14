@@ -238,8 +238,8 @@ struct SettingsView: View {
             Text("Open-source dictation for macOS, powered by Moonshine.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Link("github.com/your-org/openwispr",
-                 destination: URL(string: "https://github.com/your-org/openwispr")!)
+            Link("github.com/seeknull/openwispr",
+                 destination: URL(string: "https://github.com/seeknull/openwispr")!)
                 .font(.footnote)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
