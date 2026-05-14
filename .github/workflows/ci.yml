@@ -9,57 +9,24 @@ on:
 jobs:
   unit-tests:
     name: Unit tests (OpenWisprCore)
-    # macos-15 ships Xcode 16 with Swift 6.1 (matches our
-    # swift-tools-version in Package.swift). macos-14 has Swift 5.10
-    # which is too old.
+    # macos-15 ships Xcode 16 with Swift 6.1.
     runs-on: macos-15
     steps:
-      # Package.swift declares a local-path dependency on
-      # ../moonshine/swift, which in turn has a `.binaryTarget(path:
-      # "Moonshine.xcframework")`. SwiftPM validates that the
-      # xcframework actually exists before any compile or test starts
-      # — even one filtered down to OpenWisprCore, which doesn't
-      # actually import Moonshine.
-      #
-      # So the runner needs:
-      #   1. moonshine cloned alongside our repo at ../moonshine
-      #   2. Moonshine.xcframework built once (cached afterwards)
-      #
-      # The cache key is the moonshine repo SHA so any update to
-      # Moonshine invalidates and rebuilds. Steady-state CI run is
-      # ~30s; cold xcframework build is ~3 min.
-      - name: Checkout moonshine
-        uses: actions/checkout@v4
-        with:
-          repository: moonshine-ai/moonshine
-          path: moonshine
-
-      - name: Checkout openwispr
-        uses: actions/checkout@v4
-        with:
-          path: openwispr
+      - uses: actions/checkout@v4
 
       - name: Print toolchain
-        working-directory: openwispr
         run: |
           swift --version
           xcodebuild -version
 
-      - name: Cache Moonshine.xcframework
-        id: cache-xcf
-        uses: actions/cache@v4
-        with:
-          path: moonshine/swift/Moonshine.xcframework
-          key: moonshine-xcframework-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('moonshine/core/**', 'moonshine/scripts/build-swift.sh') }}
-
-      - name: Build Moonshine.xcframework (cache miss only)
-        if: steps.cache-xcf.outputs.cache-hit != 'true'
-        working-directory: moonshine
-        run: bash scripts/build-swift.sh
-
-      # OpenWisprCore has zero non-Foundation deps. Integration tests
-      # (which exercise MoonshineVoice + a real model) are run locally
-      # only — they need bundled model files we don't ship in CI.
-      - name: swift test --filter OpenWisprCoreTests
-        working-directory: openwispr
-        run: swift test --filter OpenWisprCoreTests
+      # OpenWisprCore is its own Swift package at ./Core with zero
+      # external dependencies. We test it standalone so CI never
+      # needs to build Moonshine.xcframework (which is a 3-min cmake
+      # build and currently fails on macos-15 due to a cross-arch
+      # linker quirk in moonshine's build-swift.sh).
+      #
+      # Integration tests for the app target (which exercise
+      # MoonshineVoice + a real model) are run locally only.
+      - name: swift test (OpenWisprCore)
+        working-directory: Core
+        run: swift test
