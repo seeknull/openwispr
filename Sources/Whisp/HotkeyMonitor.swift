@@ -5,36 +5,35 @@ import WhispCore
 
 private let log = Logger(subsystem: "ai.whisp.dev", category: "HotkeyMonitor")
 
-/// Watches for the configured hotkey at the HID level using a CGEventTap.
+/// Watches for the configured hotkey using **`NSEvent.addGlobalMonitorForEvents`**.
 ///
-/// Why an event tap and not `NSEvent.addGlobalMonitor`:
-///   - The Fn (function) key is **not** reported through the standard
-///     `NSEvent.modifierFlags` mask. It surfaces only via `CGEventFlags`
-///     including `.maskSecondaryFn`, which means we need a tap at the
-///     CGEvent level.
-///   - We want to suppress the default Fn behaviour (which on macOS
-///     opens the emoji/character picker by default in recent versions)
-///     while a session is active. An event tap allows that suppression
-///     by returning `nil` for the captured event.
+/// ## Why this and not CGEventTap
 ///
-/// Trade-offs:
-///   - The user must grant **Input Monitoring** permission for our app.
-///     macOS prompts once on first install when `CGEvent.tapCreate` is called
-///     with `listenOnly: false`. We use `listenOnly: true` to avoid asking
-///     for that elevated grant — we don't suppress the Fn key today.
+/// `CGEventTap` requires the **Input Monitoring** TCC entitlement. macOS 26
+/// silently denies that grant for ad-hoc / unsigned apps via
+/// `IOHIDRequestAccess` (we verified this by reading tccd's log), with no
+/// way to recover programmatically.
+///
+/// `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` only needs
+/// **Accessibility** — and we need Accessibility anyway for keystroke
+/// injection. So this halves our TCC surface area: one permission instead
+/// of two, and a permission that does work for ad-hoc apps.
+///
+/// Trade-off: NSEvent global monitors see events but can't *suppress* them.
+/// That's fine — Whisp never wanted to swallow Fn+Option anyway. The Fn
+/// key's default behaviour (which on recent macOS opens a "Press 🌐 key to"
+/// configured action) still fires, but the user can set that to "Do
+/// Nothing" in System Settings → Keyboard to silence it.
+///
+/// Local monitor (`NSEvent.addLocalMonitorForEvents`) covers the case where
+/// Whisp itself has key focus — global monitors deliver events only when
+/// another app is frontmost. We install both so the hotkey works whether
+/// the focus is on Whisp's settings window or on someone else's editor.
 final class HotkeyMonitor {
     typealias ToggleHandler = @MainActor (HotkeyStateMachine.Effect) -> Void
 
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    /// Dedicated thread running the event tap's run loop. macOS kills any
-    /// tap whose callback misses its deadline; if we run on the main run
-    /// loop, SwiftUI rendering can starve us and the tap gets disabled
-    /// every few seconds with `kCGEventTapDisabledByTimeout`. Off the
-    /// main thread, the callback fires deterministically and the tap
-    /// stays alive.
-    private var tapThread: Thread?
-    private var tapRunLoop: CFRunLoop?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var stateMachine = HotkeyStateMachine()
     private var config: HotkeyConfig
     private let onEffect: ToggleHandler
@@ -48,78 +47,29 @@ final class HotkeyMonitor {
         config = newConfig
     }
 
-    /// Starts the event tap. Safe to call when the Input Monitoring permission
-    /// has not been granted: the tap creation will fail and the caller can
-    /// observe `isRunning == false` to drive a permission prompt.
     @discardableResult
     func start() -> Bool {
         stop()
+        let mask: NSEvent.EventTypeMask = [.flagsChanged]
 
-        // listenOnly: we observe modifier flag changes but never swallow events
-        let mask = (1 << CGEventType.flagsChanged.rawValue)
-        let unmanagedSelf = Unmanaged.passUnretained(self)
-
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: CGEventMask(mask),
-            callback: { _, type, event, refcon in
-                guard let refcon else { return Unmanaged.passUnretained(event) }
-                let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
-                monitor.handle(type: type, event: event)
-                return Unmanaged.passUnretained(event)
-            },
-            userInfo: unmanagedSelf.toOpaque()
-        ) else {
-            return false
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.handle(event)
+        }
+        // Local monitor must return the event (or nil to swallow). We never
+        // swallow; just observe.
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.handle(event)
+            return event
         }
 
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        self.eventTap = tap
-        self.runLoopSource = source
-
-        // Spin the tap's run loop on a background thread. Apple's docs are
-        // explicit that CGEventTap callbacks must return within ~1s or
-        // macOS disables the tap (kCGEventTapDisabledByTimeout). On the
-        // main run loop, SwiftUI rendering, NSWindow resizing, and other
-        // work can starve us past that deadline. A dedicated thread
-        // sidesteps it.
-        let thread = Thread { [weak self] in
-            guard let self else { return }
-            self.tapRunLoop = CFRunLoopGetCurrent()
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-            CGEvent.tapEnable(tap: tap, enable: true)
-            // Pin the thread alive by running its run loop forever; it
-            // exits when stop() removes the source and we signal the loop.
-            while !Thread.current.isCancelled {
-                CFRunLoopRunInMode(.defaultMode, 1.0, false)
-            }
-        }
-        thread.name = "ai.whisp.HotkeyMonitor.tap"
-        thread.qualityOfService = .userInteractive
-        thread.start()
-        self.tapThread = thread
-        return true
+        return globalMonitor != nil
     }
 
-    var isRunning: Bool { eventTap != nil }
+    var isRunning: Bool { globalMonitor != nil }
 
     func stop() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let source = runLoopSource, let tapRunLoop {
-            CFRunLoopRemoveSource(tapRunLoop, source, .commonModes)
-        }
-        tapThread?.cancel()
-        if let tapRunLoop {
-            CFRunLoopStop(tapRunLoop)
-        }
-        tapThread = nil
-        tapRunLoop = nil
-        eventTap = nil
-        runLoopSource = nil
+        if let g = globalMonitor { NSEvent.removeMonitor(g); globalMonitor = nil }
+        if let l = localMonitor  { NSEvent.removeMonitor(l); localMonitor = nil }
     }
 
     /// Programmatically stop a listening session (e.g. menu bar "Stop" item).
@@ -139,40 +89,14 @@ final class HotkeyMonitor {
         stateMachine.setListening(isListening)
     }
 
-    /// Number of times the tap has been disabled since the last successful
-    /// flagsChanged event. macOS shouldn't disable a healthy listen-only
-    /// tap repeatedly — when this climbs without any real events coming
-    /// through, Input Monitoring permission is almost certainly not
-    /// granted for the current binary's CDHash (i.e. a stale TCC entry).
-    private var consecutiveTapDisables: Int = 0
+    private func handle(_ event: NSEvent) {
+        let held = modifiersAllHeld(flags: event.modifierFlags, deviceIndependentFlags: event.modifierFlags.intersection(.deviceIndependentFlagsMask))
 
-    private func handle(type: CGEventType, event: CGEvent) {
-        // If the tap was disabled (e.g., system rejected an unusual amount of
-        // work in the callback), re-enable it.
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            consecutiveTapDisables += 1
-            log.warning("Event tap disabled (\(type.rawValue, privacy: .public), count=\(self.consecutiveTapDisables, privacy: .public))")
-            if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
-            // After several disables with no real events between them,
-            // the OS is silently refusing to deliver events — that's TCC
-            // refusing the tap. Surface it.
-            if consecutiveTapDisables == 3 {
-                log.error("Input Monitoring appears denied for this build's signature — hotkey won't fire until re-granted")
-            }
-            return
-        }
-        // Real event arrived; reset the streak.
-        consecutiveTapDisables = 0
-        guard type == .flagsChanged else { return }
-
-        let flags = event.flags
-        let held = modifiersAllHeld(flags: flags)
-
-        // Trace at debug level: every flagsChanged event we see, with the
-        // raw mask, whether our hotkey is satisfied, and what the state
-        // machine decides. Surface with:
+        // NSEvent.modifierFlags reports Fn via .function — unlike CGEvent's
+        // .maskSecondaryFn, this is a published, supported API. Trace at
+        // debug level so we can see what we're getting:
         //   log stream --predicate 'subsystem == "ai.whisp.dev"' --level=debug
-        log.debug("flagsChanged raw=\(flags.rawValue, privacy: .public) held=\(held, privacy: .public)")
+        log.debug("flagsChanged raw=\(event.modifierFlags.rawValue, privacy: .public) held=\(held, privacy: .public)")
 
         let now = Date().timeIntervalSinceReferenceDate
         let effect: HotkeyStateMachine.Effect = held
@@ -186,14 +110,14 @@ final class HotkeyMonitor {
         }
     }
 
-    private func modifiersAllHeld(flags: CGEventFlags) -> Bool {
+    private func modifiersAllHeld(flags: NSEvent.ModifierFlags, deviceIndependentFlags: NSEvent.ModifierFlags) -> Bool {
         for m in config.modifiers {
             switch m {
-            case .fn:      if !flags.contains(.maskSecondaryFn)   { return false }
-            case .option:  if !flags.contains(.maskAlternate)     { return false }
-            case .command: if !flags.contains(.maskCommand)       { return false }
-            case .control: if !flags.contains(.maskControl)       { return false }
-            case .shift:   if !flags.contains(.maskShift)         { return false }
+            case .fn:      if !flags.contains(.function) { return false }
+            case .option:  if !flags.contains(.option)   { return false }
+            case .command: if !flags.contains(.command)  { return false }
+            case .control: if !flags.contains(.control)  { return false }
+            case .shift:   if !flags.contains(.shift)    { return false }
             }
         }
         return !config.modifiers.isEmpty

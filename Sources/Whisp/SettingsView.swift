@@ -104,19 +104,10 @@ struct SettingsView: View {
                 permissionRow(
                     title: "Accessibility",
                     status: permissions.accessibility,
-                    why: "Paste or type the transcript into the focused app.",
+                    why: "Paste/type transcript into the focused app, and observe the Fn+Option hotkey.",
                     action: "Open Settings"
                 ) {
                     permissions.requestAccessibility()
-                }
-
-                permissionRow(
-                    title: "Input Monitoring",
-                    status: permissions.inputMonitoring,
-                    why: "Watch for the Fn + Option hotkey.",
-                    action: "Open Settings"
-                ) {
-                    permissions.requestInputMonitoring()
                 }
 
                 if !permissions.allGranted {
@@ -147,7 +138,7 @@ struct SettingsView: View {
                     permissions.hardReset()
                 }
             } message: {
-                Text("Whisp will clear all of its TCC entries (Microphone, Accessibility, Input Monitoring), open System Settings → Privacy & Security, and quit. From there you can remove any stale \"Whisp\" rows that remain visible by clicking the row and pressing the − button, then relaunch Whisp from /Applications or your dev build for a clean grant flow.")
+                Text("Whisp will clear all of its TCC entries (Microphone, Accessibility), open System Settings → Privacy & Security, and quit. From there you can remove any stale \"Whisp\" rows that remain visible by clicking the row and pressing the − button, then relaunch Whisp from /Applications or your dev build for a clean grant flow.")
             }
         }
     }
@@ -159,7 +150,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Whisp not showing up in System Settings? Use the + button.", systemImage: "exclamationmark.bubble.fill")
                 .font(.callout.weight(.medium))
-            Text("macOS 26 blocks unsigned apps like Whisp from auto-prompting for Accessibility and Input Monitoring. The canonical workaround:")
+            Text("macOS 26 sometimes blocks unsigned apps from auto-appearing in Privacy & Security. The canonical workaround:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

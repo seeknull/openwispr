@@ -4,20 +4,14 @@ import OSLog
 import SwiftUI
 import WhispCore
 
-/// Identifies the SwiftUI-managed Settings window so the AppDelegate can
-/// programmatically open it via the `openWindow` environment action.
-private let settingsWindowID = "WhispSettingsWindow"
-
 @main
 struct WhispApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         // Whisp is a menu-bar-only app, but SwiftUI's @main requires at
-        // least one Scene. The window itself is built manually in
-        // MenuBarController so we have full control over its lifecycle —
-        // crucial under macOS 26 where SwiftUI's Settings scene doesn't
-        // surface reliably under `.accessory` activation policy.
+        // least one Scene. The Settings window is built manually in
+        // MenuBarController so we have full control over its lifecycle.
         Settings { EmptyView() }
     }
 }
@@ -28,13 +22,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     let permissions = PermissionsManager()
     let settings = WhispSettings.shared
+    let dictation = DictationController()
     private var injector: TextInjector!
     private var engine: DictationEngine!
     private var hotkey: HotkeyMonitor!
     private var menuBar: MenuBarController!
+    private var selfTest: SelfTest!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory) // menu bar only, no Dock icon
+        NSApp.setActivationPolicy(.accessory)
 
         injector = TextInjector(mode: settings.insertionMode)
 
@@ -45,61 +41,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         hotkey = HotkeyMonitor(config: settings.hotkeyConfig) { [weak self] effect in
             guard let self else { return }
             switch effect {
-            case .startListening: self.engine.start()
-            case .stopListening:  self.engine.stop()
-            case .none: break
+            case .startListening:
+                self.dictation.toggle()
+                self.engine.start()
+            case .stopListening:
+                self.dictation.toggle()
+                self.engine.stop()
+            case .none:
+                break
             }
         }
+
+        selfTest = SelfTest(
+            permissions: permissions,
+            modelPath: modelPath,
+            hotkeyIsRunning: { [weak self] in self?.hotkey.isRunning ?? false }
+        )
+
         menuBar = MenuBarController(
+            dictation: dictation,
             engine: engine,
             hotkey: hotkey,
             permissions: permissions,
-            settings: settings
+            settings: settings,
+            selfTest: selfTest
         )
 
         if !hotkey.start() {
-            log.warning("Could not start event tap — Input Monitoring permission may be missing")
+            log.warning("Could not start NSEvent monitor — Accessibility may be missing")
         }
 
-        // Always call IOHIDRequestAccess so Whisp appears in the System
-        // Settings → Input Monitoring list. CGEvent.tapCreate alone does
-        // NOT add the app to that list — without this call, the user
-        // has no row to toggle.
-        permissions.ensureInputMonitoringIsRegistered()
-
-        // First-launch onboarding: open the Settings window's Permissions
-        // tab if anything is missing. If a signature drift was detected,
-        // pre-clear stale TCC entries with tccutil so the user opens System
-        // Settings into a clean state.
+        // Run the self-test once on launch so the menu bar icon reflects
+        // health from the first frame.
         permissions.refresh()
-        // Always surface Settings on launch when permissions are missing OR
-        // when the build signature drifted (since a stale grant for a
-        // different CDHash can return `allGranted == true` even though TCC
-        // will reject the actual API calls). Letting the user see the
-        // current state on launch is friendlier than a silent menu-bar app
-        // that doesn't respond to the hotkey.
-        if !permissions.allGranted || permissions.signatureChangedSinceLastGrant {
-            if permissions.signatureChangedSinceLastGrant {
-                log.info("Signature drift detected — auto-resetting TCC entries")
-                permissions.runAutoFixup()
-            }
-            // Defer the window open by one tick. Showing a window from
-            // inside applicationDidFinishLaunching sometimes races with
-            // SwiftUI's own scene setup and the window doesn't actually
-            // surface — by the time the run loop spins once, the app is
-            // fully ready and `openSettings` reliably brings it up.
+        menuBar.runSelfTestAndRefreshIcon()
+
+        // Open Settings if anything is missing — landing in the
+        // Permissions tab is the most useful starting place.
+        if !permissions.allGranted {
             DispatchQueue.main.async { [weak self] in
                 self?.menuBar.openSettings()
             }
         }
     }
 
-    /// Resolve the bundled model directory.
-    ///
-    /// The build script bundles `medium-streaming-en/quantized` into the app's
-    /// resources. For developer builds where the bundle hasn't been populated
-    /// yet, we fall back to `MoonshineVoice`'s test-assets/tiny-en (shipped
-    /// inside `Moonshine.xcframework`) so the app launches at all.
     private func locateBundledModel() -> (String, ModelArch) {
         if let bundled = Bundle.main.resourceURL?
             .appendingPathComponent("models/medium-streaming-en/quantized"),
