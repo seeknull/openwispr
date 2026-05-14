@@ -1,5 +1,7 @@
 import AppKit
+import ApplicationServices
 import CoreGraphics
+import OSLog
 import OpenWisprCore
 
 /// Inserts text into whatever app currently has keyboard focus. Two
@@ -9,15 +11,30 @@ import OpenWisprCore
 /// System Settings → Privacy & Security → Accessibility).
 @MainActor
 final class TextInjector {
+    private let log = Logger(subsystem: "dev.openwispr.app", category: "TextInjector")
     var mode: InsertionMode
 
     init(mode: InsertionMode) {
         self.mode = mode
     }
 
-    /// Insert `text` at the current cursor location. No-op for empty strings.
+    /// Insert `text` at the current cursor location. No-op for empty
+    /// strings or when Accessibility hasn't been granted.
+    ///
+    /// We MUST pre-check `AXIsProcessTrusted()` before calling
+    /// `CGEvent.post(...)`. Without the grant, posting events causes
+    /// macOS to surface its "Keystroke Receiving" prompt — which fires
+    /// on every transcribed line, looping indefinitely until the user
+    /// grants. The prompt's display name also gets cached from the
+    /// first-ever prompt for this bundle id and is stuck on the
+    /// original name across rebuilds. Pre-checking avoids the prompt
+    /// entirely.
     func insert(_ text: String) {
         guard !text.isEmpty else { return }
+        guard AXIsProcessTrusted() else {
+            log.warning("Skipping text insertion — Accessibility not granted")
+            return
+        }
         switch mode {
         case .clipboardPaste: pasteViaClipboard(text)
         case .keystroke:      typeAsKeystrokes(text)
