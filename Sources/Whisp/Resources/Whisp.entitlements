@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        Whisp ships unsigned for now (see distribution.md). The App Sandbox
+        is therefore disabled to keep CGEventTap and arbitrary clipboard
+        access working without entitlements review.
+
+        If you later notarize or sandbox the app, you'll need to enable:
+          - com.apple.security.device.audio-input
+          - com.apple.security.automation.apple-events
+        and request Input Monitoring + Accessibility manually as TCC.
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+</dict>
+</plist>

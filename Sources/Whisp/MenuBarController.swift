@@ -1,0 +1,166 @@
+import AppKit
+import Combine
+import SwiftUI
+import WhispCore
+
+/// Owns the `NSStatusItem` in the menu bar and the right-click/click menu.
+/// Listens to `DictationEngine` state and re-renders the icon.
+@MainActor
+final class MenuBarController: NSObject {
+    private let statusItem: NSStatusItem
+    private let engine: DictationEngine
+    private let hotkey: HotkeyMonitor
+    private let permissions: PermissionsManager
+    private let settings: WhispSettings
+    private let hud = ListeningHUD()
+    private var settingsWindow: NSWindow?
+    private var currentState: DictationState = .idle
+
+    init(
+        engine: DictationEngine,
+        hotkey: HotkeyMonitor,
+        permissions: PermissionsManager,
+        settings: WhispSettings
+    ) {
+        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        self.engine = engine
+        self.hotkey = hotkey
+        self.permissions = permissions
+        self.settings = settings
+        super.init()
+
+        configureStatusItem()
+        engine.onStateChange = { [weak self] state in
+            self?.applyState(state)
+        }
+    }
+
+    private func configureStatusItem() {
+        if let button = statusItem.button {
+            button.image = idleIcon
+            button.image?.isTemplate = true
+            button.toolTip = "Whisp — \(settings.hotkeyConfig.displayName) to dictate"
+        }
+        statusItem.menu = buildMenu()
+    }
+
+    private func buildMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let toggle = NSMenuItem(
+            title: engine.isListening ? "Stop Dictating" : "Start Dictating",
+            action: #selector(toggleDictation),
+            keyEquivalent: ""
+        )
+        toggle.target = self
+        menu.addItem(toggle)
+
+        menu.addItem(.separator())
+
+        let prefs = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        prefs.target = self
+        menu.addItem(prefs)
+
+        let perms = NSMenuItem(title: "Check Permissions…", action: #selector(openPermissions), keyEquivalent: "")
+        perms.target = self
+        menu.addItem(perms)
+
+        menu.addItem(.separator())
+
+        let about = NSMenuItem(title: "About Whisp", action: #selector(openAbout), keyEquivalent: "")
+        about.target = self
+        menu.addItem(about)
+
+        let quit = NSMenuItem(title: "Quit Whisp", action: #selector(quit), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+
+        return menu
+    }
+
+    func applyState(_ state: DictationState) {
+        currentState = state
+        switch state {
+        case .idle:
+            statusItem.button?.image = idleIcon
+            statusItem.button?.image?.isTemplate = true
+            hud.hide()
+        case .listening:
+            statusItem.button?.image = listeningIcon
+            statusItem.button?.image?.isTemplate = false
+            if settings.showHUD { hud.show() }
+        case .error(let msg):
+            statusItem.button?.image = idleIcon
+            statusItem.button?.toolTip = "Whisp — \(msg)"
+            hud.hide()
+        }
+        // Refresh menu so the toggle item title matches.
+        statusItem.menu = buildMenu()
+    }
+
+    // MARK: - Icons
+
+    private var idleIcon: NSImage? {
+        let img = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Whisp idle")
+        return img
+    }
+
+    private var listeningIcon: NSImage? {
+        let cfg = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+        let img = NSImage(systemSymbolName: "waveform.circle.fill",
+                          accessibilityDescription: "Whisp listening")
+        return img?.withSymbolConfiguration(cfg)
+    }
+
+    // MARK: - Menu actions
+
+    @objc private func toggleDictation() {
+        if engine.isListening {
+            engine.stop()
+            hotkey.forceStop()
+        } else {
+            // Make sure permissions are present before starting.
+            permissions.refresh()
+            guard permissions.allGranted else {
+                openPermissions()
+                return
+            }
+            engine.start()
+        }
+    }
+
+    @objc func openSettings() {
+        permissions.refresh()
+        if settingsWindow == nil {
+            let view = SettingsView(
+                settings: settings,
+                permissions: permissions,
+                onCheckPermissions: { [weak self] in self?.permissions.refresh() }
+            )
+            let host = NSHostingController(rootView: view)
+            let window = NSWindow(contentViewController: host)
+            window.title = "Whisp Settings"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.identifier = NSUserInterfaceItemIdentifier("WhispSettingsWindow")
+            window.setAccessibilityIdentifier("WhispSettingsWindow")
+            settingsWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func openPermissions() {
+        openSettings()
+    }
+
+    @objc private func openAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
+    @objc private func quit() {
+        NSApp.terminate(nil)
+    }
+}

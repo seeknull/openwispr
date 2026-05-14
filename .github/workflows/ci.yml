@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  unit-tests:
+    name: Unit tests (WhispCore)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app || true
+
+      - name: Print toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # WhispCore has zero non-Foundation deps, so we can run its tests
+      # without the heavy bootstrap of Moonshine.xcframework.
+      - name: swift test --filter WhispCoreTests
+        run: swift test --filter WhispCoreTests
+
+  integration-tests:
+    name: Integration tests (Moonshine WAV roundtrip)
+    runs-on: macos-14
+    # Integration tests need the Moonshine xcframework, which means cloning
+    # the moonshine repo and building it. This is several minutes; keep it
+    # off the critical path so PRs don't block on it.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: whisp
+
+      - uses: actions/checkout@v4
+        with:
+          repository: moonshine-ai/moonshine
+          path: moonshine
+
+      - name: Install cmake
+        run: brew install cmake
+
+      - name: Bootstrap (builds Moonshine.xcframework)
+        working-directory: whisp
+        run: ./scripts/bootstrap.sh
+
+      - name: swift test
+        working-directory: whisp
+        run: swift test

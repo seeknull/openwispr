@@ -1,0 +1,25 @@
+# Swift / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Build artifacts
+build/
+dist/
+*.app
+*.dmg
+*.zip
+
+# Models (downloaded by scripts/download-models.sh, not committed)
+Sources/Whisp/Resources/models/
+
+# Editor
+.vscode/
+.idea/
+*.swp
