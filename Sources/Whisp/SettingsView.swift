@@ -6,6 +6,12 @@ struct SettingsView: View {
     @ObservedObject var permissions: PermissionsManager
     let onCheckPermissions: () -> Void
 
+    /// Polls the system permission state every two seconds while the
+    /// Settings window is visible. macOS gives us no notification when a
+    /// user toggles Whisp in System Settings, so polling is the only way
+    /// to react to an external grant in near-real-time.
+    private let pollTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
     var body: some View {
         TabView {
             generalTab
@@ -15,8 +21,9 @@ struct SettingsView: View {
             aboutTab
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 520, height: 360)
+        .frame(width: 520, height: 380)
         .padding()
+        .onReceive(pollTimer) { _ in onCheckPermissions() }
     }
 
     private var generalTab: some View {
@@ -97,20 +104,24 @@ struct SettingsView: View {
         .padding()
     }
 
-    /// Shown when the user has clicked into System Settings for Accessibility
-    /// or Input Monitoring. The grant doesn't propagate to the running
-    /// process; a relaunch is the honest fix.
+    /// Shown whenever Accessibility or Input Monitoring is not observably
+    /// granted. macOS caches both decisions per-process, so a grant the
+    /// user has *actually* made may still look like `.notDetermined` to
+    /// this running process — a relaunch is the only way to find out.
+    /// We always show this when either is missing, regardless of who
+    /// did what.
     private var restartBanner: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "arrow.clockwise.circle.fill")
                 .foregroundStyle(.tint)
                 .imageScale(.large)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Restart Whisp to apply the new permissions")
+                Text("Already granted in System Settings? Restart Whisp.")
                     .font(.headline)
-                Text("macOS only delivers Accessibility and Input Monitoring grants to a fresh launch. The running process will keep seeing the old (denied) state until restart.")
+                Text("macOS caches Accessibility and Input Monitoring decisions inside the running process. If you've toggled Whisp on but it still says \"Needed\" here, relaunching is what lets Whisp see the new grant.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             Button("Restart Whisp") {

@@ -11,17 +11,19 @@ import Foundation
 ///   2. Accessibility — needed to post synthetic input events.
 ///   3. Input Monitoring — needed for the CGEventTap that watches the hotkey.
 ///
-/// ## Why we always nudge a restart after granting Accessibility / Input Monitoring
+/// ## The "running process can't see the new grant" trap
 ///
-/// Both `AXIsProcessTrusted()` and `CGEvent.tapCreate(listenOnly:)` cache the
-/// permission decision inside the current process. macOS only delivers the
-/// **new** grant decision to a freshly-launched process. So if the user grants
-/// Accessibility while Whisp is running, our "Re-check" button might *say*
-/// it's granted but the underlying CGEvent APIs will still be denied.
+/// Both `AXIsProcessTrusted()` and `CGEvent.tapCreate(listenOnly:)` cache
+/// their permission decision inside the current process. macOS delivers the
+/// **new** grant only to a freshly-launched process. So if you grant
+/// Accessibility while Whisp is running, this class's `accessibility`
+/// property keeps returning `.notDetermined` regardless of how many times
+/// we re-poll — the API itself lies.
 ///
-/// `pendingRestartGrants` tracks which permissions the user has actively
-/// gone to grant in System Settings. The UI uses that to flip the
-/// "Open Settings" button into "Restart Whisp" once the user comes back.
+/// We can't fix that API, so the UX strategy is: any time Accessibility or
+/// Input Monitoring is not `.granted`, surface a "Restart Whisp" button.
+/// The honest message is "either you haven't granted, or you did and we
+/// can't see it — relaunching fixes both."
 enum PermissionStatus: Equatable {
     case granted
     case denied
@@ -40,12 +42,6 @@ final class PermissionsManager: ObservableObject {
     @Published private(set) var accessibility: PermissionStatus = .notDetermined
     @Published private(set) var inputMonitoring: PermissionStatus = .notDetermined
 
-    /// Permissions for which the user has clicked our "Open Settings" /
-    /// "Request" buttons during this Whisp session. Once a permission is in
-    /// this set, the UI shows a "Restart Whisp" prompt because the running
-    /// process can't actually pick up the new grant.
-    @Published private(set) var pendingRestartGrants: Set<PermissionKind> = []
-
     init() { refresh() }
 
     /// Re-query every permission. Cheap; safe to call from UI on demand.
@@ -59,22 +55,22 @@ final class PermissionsManager: ObservableObject {
         microphone == .granted && accessibility == .granted && inputMonitoring == .granted
     }
 
+    /// True whenever a system-level permission may have been granted but the
+    /// running process can't observe it (because TCC caches per-process).
+    /// We treat *any* non-granted state for Accessibility or Input Monitoring
+    /// as "user might already have granted, restart to find out."
     var needsRestart: Bool {
-        !pendingRestartGrants.isEmpty
+        accessibility != .granted || inputMonitoring != .granted
     }
 
     /// Spawn `open -n` to launch a fresh copy of Whisp and exit the current
-    /// process. The new instance picks up TCC grants that landed after we
-    /// started.
+    /// process. The new instance picks up any TCC grants that landed while
+    /// the old one was running.
     func restartWhisp() {
-        guard let bundlePath = Bundle.main.bundleURL.path as String? else {
-            NSApp.terminate(nil)
-            return
-        }
-        // `open -n` always launches a new instance, even if one is "already
-        // running" from LaunchServices's POV. We terminate ourselves after
-        // a beat so LaunchServices doesn't see the new launch as a
-        // re-activation.
+        let bundlePath = Bundle.main.bundleURL.path
+        // `open -n` always launches a new instance, even if LaunchServices
+        // thinks the app is "already running." We terminate ourselves after
+        // a beat so the new launch isn't merged with the dying instance.
         let task = Process()
         task.launchPath = "/usr/bin/open"
         task.arguments = ["-n", bundlePath]
@@ -96,8 +92,8 @@ final class PermissionsManager: ObservableObject {
     }
 
     /// Prompts the user for mic access if not already determined. Mic
-    /// permission *does* flow through to the running process so we do
-    /// NOT mark a restart-required.
+    /// permission flows through to the running process so this DOES update
+    /// the live status — no restart needed.
     func requestMicrophone() {
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
             DispatchQueue.main.async { self?.refresh() }
@@ -112,8 +108,7 @@ final class PermissionsManager: ObservableObject {
 
     /// Triggers the system Accessibility prompt and opens System Settings.
     /// macOS will not flip the trust bit for the *running* process — only
-    /// for the next launch — so we flag this permission as needing a
-    /// restart.
+    /// for the next launch.
     func requestAccessibility() {
         // `kAXTrustedCheckOptionPrompt` is declared as a mutable C global;
         // Swift 6 won't let us read through it directly. The string literal
@@ -122,41 +117,37 @@ final class PermissionsManager: ObservableObject {
         let options: CFDictionary = [key: kCFBooleanTrue!] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
         openSystemSettings(pane: "Privacy_Accessibility")
-        pendingRestartGrants.insert(.accessibility)
     }
 
     // MARK: - Input Monitoring (for CGEventTap)
 
-    /// Cached check result. Re-running `CGEvent.tapCreate` repeatedly is
-    /// wasteful and macOS may rate-limit the underlying TCC check.
-    private var cachedInputMonitoringStatus: PermissionStatus?
-
+    /// Probes by creating a `listenOnly` event tap. This is the only
+    /// reliable signal for Input Monitoring in user code — Apple has no
+    /// public TCC-query API for it.
+    ///
+    /// We deliberately do NOT cache this result. The user can flip the
+    /// grant in System Settings at any moment and we want `refresh()` to
+    /// pick it up next time the Settings tab is opened.
     private func inputMonitoringStatus() -> PermissionStatus {
-        if let cached = cachedInputMonitoringStatus { return cached }
         let mask = (1 << CGEventType.flagsChanged.rawValue)
-        let status: PermissionStatus
-        if let tap = CGEvent.tapCreate(
+        guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .listenOnly,
             eventsOfInterest: CGEventMask(mask),
             callback: { _, _, e, _ in Unmanaged.passUnretained(e) },
             userInfo: nil
-        ) {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            status = .granted
-        } else {
-            status = .notDetermined
+        ) else {
+            return .notDetermined
         }
-        cachedInputMonitoringStatus = status
-        return status
+        CGEvent.tapEnable(tap: tap, enable: false)
+        return .granted
     }
 
     func requestInputMonitoring() {
         // No direct API triggers this prompt; opening the pane and asking
         // the user to enable Whisp is the canonical flow.
         openSystemSettings(pane: "Privacy_ListenEvent")
-        pendingRestartGrants.insert(.inputMonitoring)
     }
 
     // MARK: - Helpers
