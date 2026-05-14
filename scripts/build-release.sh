@@ -66,6 +66,34 @@ fi
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/OpenWispr"
 cp Sources/OpenWispr/Resources/Info.plist "$APP_DIR/Contents/Info.plist"
 
+# Stamp build metadata into the Info.plist so the running app can
+# display "which build is this?" in Settings. We write three keys:
+#   - CFBundleVersion              short numeric build number (YYYYMMDDhhmm UTC)
+#   - OWBuildDate                  ISO-8601 UTC string, human-readable
+#   - OWBuildCommit                git short SHA, if we're inside a checkout
+BUILD_TIMESTAMP_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+BUILD_NUMBER="$(date -u +%Y%m%d%H%M)"
+BUILD_COMMIT="$(git -C "$WHISP_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+/usr/libexec/PlistBuddy \
+    -c "Set :CFBundleVersion $BUILD_NUMBER" \
+    "$APP_DIR/Contents/Info.plist"
+
+# Custom keys: PlistBuddy errors if the key is missing, so try Set
+# then fall back to Add.
+for entry in \
+    "OWBuildDate string $BUILD_TIMESTAMP_UTC" \
+    "OWBuildCommit string $BUILD_COMMIT"
+do
+    key=$(echo "$entry" | awk '{print $1}')
+    type=$(echo "$entry" | awk '{print $2}')
+    value=$(echo "$entry" | cut -d' ' -f3-)
+    /usr/libexec/PlistBuddy -c "Set :$key $value" "$APP_DIR/Contents/Info.plist" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :$key $type $value" "$APP_DIR/Contents/Info.plist"
+done
+
+echo "==> Build stamp: version=$VERSION build=$BUILD_NUMBER commit=$BUILD_COMMIT"
+
 # Copy bundled resources next to the binary.
 if [ -d "Sources/OpenWispr/Resources/models" ]; then
     cp -R Sources/OpenWispr/Resources/models "$APP_DIR/Contents/Resources/models"

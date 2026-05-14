@@ -28,18 +28,34 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            generalTab
-                .tabItem { Label("General", systemImage: "gearshape") }
-                .tag(Tab.general)
-            permissionsTab
-                .tabItem { Label("Permissions", systemImage: "lock.shield") }
-                .tag(Tab.permissions)
-            aboutTab
-                .tabItem { Label("About", systemImage: "info.circle") }
-                .tag(Tab.about)
+        VStack(spacing: 0) {
+            TabView(selection: $selectedTab) {
+                generalTab
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                    .tag(Tab.general)
+                permissionsTab
+                    .tabItem { Label("Permissions", systemImage: "lock.shield") }
+                    .tag(Tab.permissions)
+                aboutTab
+                    .tabItem { Label("About", systemImage: "info.circle") }
+                    .tag(Tab.about)
+            }
+
+            // Persistent footer: build info on every tab so you can
+            // tell at a glance which build is running, especially
+            // useful while iterating on dev builds.
+            Divider()
+            HStack {
+                Text(AppVersion.summaryLine)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
         }
-        .frame(width: 540, height: 460)
+        .frame(width: 540, height: 480)
         .padding()
         // Refresh only on tab change AND when the window becomes key
         // again (after the user came back from System Settings).
@@ -241,8 +257,38 @@ struct SettingsView: View {
             Link("github.com/seeknull/openwispr",
                  destination: URL(string: "https://github.com/seeknull/openwispr")!)
                 .font(.footnote)
+
+            buildInfoBox
+                .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+
+    /// Detailed build metadata block on the About tab. Stamped at
+    /// release-build time by scripts/build-release.sh.
+    private var buildInfoBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            buildInfoRow("Version", "v\(AppVersion.version)")
+            buildInfoRow("Build", AppVersion.buildNumber)
+            buildInfoRow("Built", AppVersion.friendlyBuildDate)
+            buildInfoRow("Commit", AppVersion.commitSHA)
+        }
+        .padding(12)
+        .frame(maxWidth: 360)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.10)))
+    }
+
+    private func buildInfoRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 64, alignment: .leading)
+            Text(value)
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+            Spacer()
+        }
     }
 }
