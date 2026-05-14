@@ -8,8 +8,24 @@ name: Release
 #   git tag v0.1.0
 #   git push origin v0.1.0
 #
-# To dry-run without publishing, use workflow_dispatch from the
-# Actions tab and set publish=false.
+# Or use workflow_dispatch from the Actions tab with an explicit tag.
+#
+# ## Known issue: Moonshine.xcframework build fails on the runner
+#
+# As of writing, moonshine/scripts/build-swift.sh hits a cross-arch
+# linker error on macos-15 runners (libonnxruntime.a is arm64-only
+# but the universal build links it for x86_64 too). When you push a
+# tag the workflow runs, fails at the xcframework step, and you'll
+# need to:
+#
+#   1. Build the release locally with ./scripts/build-release.sh
+#   2. cp dist/OpenWispr-X.Y.Z.zip dist/OpenWispr.zip
+#   3. shasum -a 256 dist/OpenWispr.zip > dist/OpenWispr.zip.sha256
+#   4. gh release create vX.Y.Z dist/OpenWispr.zip \
+#        dist/OpenWispr.zip.sha256 --title "vX.Y.Z" --notes "..."
+#
+# Once Moonshine fixes their build script, this workflow will work
+# unattended.
 
 on:
   push:
