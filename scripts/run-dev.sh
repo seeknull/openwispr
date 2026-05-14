@@ -82,10 +82,10 @@ fi
 
 # ---- 5. Reset TCC grants if requested ----
 if [ "$DO_RESET" = 1 ]; then
-    echo "==> Resetting TCC grants for ai.whisp.app"
-    tccutil reset Microphone     ai.whisp.app 2>/dev/null || true
-    tccutil reset Accessibility  ai.whisp.app 2>/dev/null || true
-    tccutil reset ListenEvent    ai.whisp.app 2>/dev/null || true
+    echo "==> Resetting TCC grants for ai.whisp.dev"
+    tccutil reset Microphone     ai.whisp.dev 2>/dev/null || true
+    tccutil reset Accessibility  ai.whisp.dev 2>/dev/null || true
+    tccutil reset ListenEvent    ai.whisp.dev 2>/dev/null || true
     cat <<'EOF'
 
    IMPORTANT: tccutil reset clears the grant decision but leaves the
@@ -132,8 +132,8 @@ if [ -n "$PREV_HASH" ] && [ "$PREV_HASH" != "$NEW_HASH" ] && [ "$DO_RESET" = 0 ]
     auto-reset. Whisp's onboarding sheet will walk you through the rest.
 
 EOF
-    tccutil reset Accessibility ai.whisp.app 2>/dev/null || true
-    tccutil reset ListenEvent   ai.whisp.app 2>/dev/null || true
+    tccutil reset Accessibility ai.whisp.dev 2>/dev/null || true
+    tccutil reset ListenEvent   ai.whisp.dev 2>/dev/null || true
 fi
 
 # ---- 8. Launch via `open` so LaunchServices registers the bundle ----
@@ -143,5 +143,5 @@ open "$APP"
 # ---- 9. Tail Whisp logs if requested ----
 if [ "$DO_LOGS" = 1 ]; then
     echo "==> Streaming Whisp logs (Ctrl+C to stop)"
-    exec log stream --predicate 'subsystem == "ai.whisp.app"' --level=debug
+    exec log stream --predicate 'subsystem == "ai.whisp.dev"' --level=debug
 fi

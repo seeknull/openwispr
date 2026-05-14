@@ -5,7 +5,7 @@ import WhispCore
 /// User-tunable preferences, persisted via @AppStorage.
 ///
 /// We use plain `@AppStorage` strings/bools so the persisted format stays
-/// readable in `defaults read ai.whisp.app` — useful for support.
+/// readable in `defaults read ai.whisp.dev` — useful for support.
 @MainActor
 final class WhispSettings: ObservableObject {
     static let shared = WhispSettings()

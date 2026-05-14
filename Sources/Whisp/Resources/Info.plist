@@ -11,7 +11,7 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>ai.whisp.app</string>
+    <string>ai.whisp.dev</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

@@ -46,7 +46,7 @@ enum PermissionKind: String, CaseIterable {
 
 @MainActor
 final class PermissionsManager: ObservableObject {
-    private let log = Logger(subsystem: "ai.whisp.app", category: "PermissionsManager")
+    private let log = Logger(subsystem: "ai.whisp.dev", category: "PermissionsManager")
 
     @Published private(set) var microphone: PermissionStatus = .notDetermined
     @Published private(set) var accessibility: PermissionStatus = .notDetermined
@@ -98,7 +98,7 @@ final class PermissionsManager: ObservableObject {
     @discardableResult
     func runAutoFixup() -> Bool {
         log.info("Running auto-fixup: tccutil reset Accessibility / ListenEvent for \(Bundle.main.bundleIdentifier ?? "?", privacy: .public)")
-        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.app"
+        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.dev"
         var anySuccess = false
         for service in ["Accessibility", "ListenEvent"] {
             if runTccutil(service: service, bundle: bundleID) {
@@ -124,8 +124,8 @@ final class PermissionsManager: ObservableObject {
     /// Opens System Settings → Privacy & Security so they're a click
     /// away from doing so.
     func hardReset() {
-        log.warning("Hard reset: clearing all TCC grants for ai.whisp.app")
-        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.app"
+        log.warning("Hard reset: clearing all TCC grants for ai.whisp.dev")
+        let bundleID = Bundle.main.bundleIdentifier ?? "ai.whisp.dev"
         // `tccutil reset All <bundle>` clears every per-service entry plus
         // the underlying per-code-requirement metadata that `reset <service>`
         // sometimes leaves behind. This is the most thorough form.

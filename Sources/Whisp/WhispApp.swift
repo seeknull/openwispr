@@ -24,7 +24,7 @@ struct WhispApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
-    private let log = Logger(subsystem: "ai.whisp.app", category: "AppDelegate")
+    private let log = Logger(subsystem: "ai.whisp.dev", category: "AppDelegate")
 
     let permissions = PermissionsManager()
     let settings = WhispSettings.shared

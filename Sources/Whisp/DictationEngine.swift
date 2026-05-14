@@ -10,7 +10,7 @@ import WhispCore
 /// reloading the model.
 @MainActor
 final class DictationEngine {
-    private let log = Logger(subsystem: "ai.whisp.app", category: "DictationEngine")
+    private let log = Logger(subsystem: "ai.whisp.dev", category: "DictationEngine")
 
     private let modelPath: String
     private let modelArch: ModelArch

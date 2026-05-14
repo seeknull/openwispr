@@ -3,7 +3,7 @@ import CoreGraphics
 import OSLog
 import WhispCore
 
-private let log = Logger(subsystem: "ai.whisp.app", category: "HotkeyMonitor")
+private let log = Logger(subsystem: "ai.whisp.dev", category: "HotkeyMonitor")
 
 /// Watches for the configured hotkey at the HID level using a CGEventTap.
 ///
@@ -171,7 +171,7 @@ final class HotkeyMonitor {
         // Trace at debug level: every flagsChanged event we see, with the
         // raw mask, whether our hotkey is satisfied, and what the state
         // machine decides. Surface with:
-        //   log stream --predicate 'subsystem == "ai.whisp.app"' --level=debug
+        //   log stream --predicate 'subsystem == "ai.whisp.dev"' --level=debug
         log.debug("flagsChanged raw=\(flags.rawValue, privacy: .public) held=\(held, privacy: .public)")
 
         let now = Date().timeIntervalSinceReferenceDate

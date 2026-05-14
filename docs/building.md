@@ -104,4 +104,4 @@ rm -rf ../moonshine/swift/Moonshine.xcframework ../moonshine/core/build
 `Info.plist` sets `LSUIElement = true`, which makes Whisp an agent
 (no Dock icon). The icon will be in the menu bar — look for the
 waveform glyph on the right side. If it's truly missing, check
-Console.app for `subsystem:ai.whisp.app` log lines.
+Console.app for `subsystem:ai.whisp.dev` log lines.

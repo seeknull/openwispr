@@ -85,7 +85,7 @@ the waveform glyph in your menu bar (right side, near the system icons).
 If the icon really is missing:
 
 ```bash
-log show --predicate 'subsystem == "ai.whisp.app"' --last 1m
+log show --predicate 'subsystem == "ai.whisp.dev"' --last 1m
 ```
 
 That tails anything Whisp wrote to Console. Common issues that surface
@@ -122,9 +122,9 @@ and more reliable everywhere.
 Nuclear option, useful when things are deeply confused:
 
 ```bash
-tccutil reset Microphone     ai.whisp.app
-tccutil reset Accessibility  ai.whisp.app
-tccutil reset ListenEvent    ai.whisp.app
+tccutil reset Microphone     ai.whisp.dev
+tccutil reset Accessibility  ai.whisp.dev
+tccutil reset ListenEvent    ai.whisp.dev
 ```
 
 Or do it in one shot:
@@ -139,7 +139,7 @@ Permissions tab from scratch.
 ## Where Whisp logs
 
 ```bash
-log stream --predicate 'subsystem == "ai.whisp.app"' --level=debug
+log stream --predicate 'subsystem == "ai.whisp.dev"' --level=debug
 ```
 
 `./scripts/run-dev.sh --logs` does this for you after rebuilding.

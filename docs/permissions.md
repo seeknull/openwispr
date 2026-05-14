@@ -61,10 +61,10 @@ this explicit.
 If you need to re-test the onboarding flow:
 
 ```bash
-# Reset just Whisp's grants (replace ai.whisp.app with your bundle id)
-tccutil reset Microphone ai.whisp.app
-tccutil reset Accessibility ai.whisp.app
-tccutil reset ListenEvent ai.whisp.app
+# Reset just Whisp's grants (replace ai.whisp.dev with your bundle id)
+tccutil reset Microphone ai.whisp.dev
+tccutil reset Accessibility ai.whisp.dev
+tccutil reset ListenEvent ai.whisp.dev
 ```
 
 Each `tccutil reset` re-arms the prompt on next launch.
