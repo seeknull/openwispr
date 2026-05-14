@@ -1,0 +1,50 @@
+name: Deploy landing page
+
+# Publishes docs/site/ to GitHub Pages on every push to main that
+# touches the site, plus a manual "Run workflow" button for ad-hoc
+# republishes.
+#
+# The site is plain HTML + CSS, no build step required. We just upload
+# docs/site/ as the Pages artifact.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Only one Pages deploy can run at a time. Cancel-in-progress = false
+# so a queued deploy completes rather than getting overwritten by the
+# next push.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
