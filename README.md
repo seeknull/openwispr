@@ -157,3 +157,7 @@ and trace outward. PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - Inspired by [VoiceInk](https://github.com/Beingpax/VoiceInk) and
   [OpenSuperWhisper](https://github.com/Starmel/OpenSuperWhisper) —
   open-source dictation apps that paved the way.
+
+---
+
+Part of [seek:null](https://seeknull.com) — things built to scratch an itch.
